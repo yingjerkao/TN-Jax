@@ -284,6 +284,152 @@ class TestBuildMPS:
         assert mps.n_edges() >= 2
 
 
+class TestCacheMutationFuzz:
+    """Cache must be invalidated after every structural mutation.
+
+    Each test verifies that contract(cache=True) and contract(cache=False)
+    agree immediately after a mutation, proving no stale entry was returned.
+    """
+
+    def _make_vec(self, u1, label, scale=1.0, seed=0, dim=3):
+        charges = np.zeros(dim, dtype=np.int32)
+        data = jax.random.normal(jax.random.PRNGKey(seed), (dim,)) * scale
+        return DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN, label=label),))
+
+    def test_replace_tensor_invalidates_cache(self, u1):
+        """After replace_tensor the cache must not return the old result."""
+        tn = TensorNetwork()
+        t1 = self._make_vec(u1, "a", scale=1.0, seed=1)
+        t2 = self._make_vec(u1, "a", scale=2.0, seed=2)
+        tn.add_node("A", t1)
+
+        r_before = tn.contract()
+        tn.replace_tensor("A", t2)
+        r_cached = tn.contract(cache=True)
+        r_fresh  = tn.contract(cache=False)
+
+        np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
+        # Sanity: replacing with a different tensor changed the result
+        assert not jnp.allclose(r_before.todense(), r_cached.todense())
+
+    def test_add_node_invalidates_cache(self, u1):
+        """After add_node the cached all-node contraction must include the new node."""
+        tn = TensorNetwork()
+        t_a = self._make_vec(u1, "x", seed=10)
+        t_b = self._make_vec(u1, "y", seed=11)
+        tn.add_node("A", t_a)
+
+        r1 = tn.contract()  # only A, shape (3,)
+        tn.add_node("B", t_b)
+
+        r_cached = tn.contract(cache=True)
+        r_fresh  = tn.contract(cache=False)
+
+        np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
+        # Adding B changes the result shape (outer product with B)
+        assert r_cached.ndim == r1.ndim + t_b.ndim
+
+    def test_remove_node_invalidates_cache(self, u1):
+        """After remove_node the cache must not include the removed tensor."""
+        tn = TensorNetwork()
+        t_a = self._make_vec(u1, "x", seed=20)
+        t_b = self._make_vec(u1, "y", seed=21)
+        tn.add_node("A", t_a)
+        tn.add_node("B", t_b)
+
+        r_both = tn.contract()  # A ⊗ B, shape (3, 3)
+        tn.remove_node("B")
+
+        r_cached = tn.contract(cache=True)
+        r_fresh  = tn.contract(cache=False)
+
+        np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
+        assert r_cached.ndim < r_both.ndim
+
+    def test_connect_invalidates_cache(self, u1):
+        """After connect, contraction changes from outer product to dot product.
+
+        A has label "la", B has label "lb" — different labels means outer product
+        before connecting. After connecting "la"-"lb", the contraction relabels
+        B's leg to "la" so both share a label → dot product (scalar).
+        """
+        charges = np.zeros(3, dtype=np.int32)
+        data = jnp.array([1.0, 2.0, 3.0])
+        A = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN,  label="la"),))
+        B = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.OUT, label="lb"),))
+
+        tn = TensorNetwork()
+        tn.add_node("A", A)
+        tn.add_node("B", B)
+
+        r_outer = tn.contract()  # outer product, shape (3, 3)
+        tn.connect("A", "la", "B", "lb")
+
+        r_cached = tn.contract(cache=True)
+        r_fresh  = tn.contract(cache=False)
+
+        np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
+        # After connecting, the bond is contracted → scalar
+        assert r_cached.ndim < r_outer.ndim
+
+    def test_disconnect_invalidates_cache(self, u1):
+        """After disconnect, contraction expands back to outer product."""
+        charges = np.zeros(3, dtype=np.int32)
+        data = jnp.array([1.0, 2.0, 3.0])
+        A = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN,  label="la"),))
+        B = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.OUT, label="lb"),))
+
+        tn = TensorNetwork()
+        tn.add_node("A", A)
+        tn.add_node("B", B)
+        tn.connect("A", "la", "B", "lb")
+
+        r_contracted = tn.contract()  # scalar
+        tn.disconnect("A", "la", "B", "lb")
+
+        r_cached = tn.contract(cache=True)
+        r_fresh  = tn.contract(cache=False)
+
+        np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
+        assert r_cached.ndim > r_contracted.ndim
+
+    def test_relabel_bond_invalidates_cache(self, u1):
+        """After relabel_bond the cache is cleared and the new label is used."""
+        tn = TensorNetwork()
+        t = self._make_vec(u1, "old", seed=30)
+        tn.add_node("A", t)
+
+        r1 = tn.contract()
+        tn.relabel_bond("A", "old", "new")
+
+        r_cached = tn.contract(cache=True)
+        r_fresh  = tn.contract(cache=False)
+
+        np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
+        # The new label is on the result tensor
+        assert "new" in tn.get_tensor("A").labels()
+
+    def test_sequential_mutations_cache_consistency(self, u1):
+        """Multiple mutations in sequence: cache always agrees with fresh result."""
+        charges = np.zeros(3, dtype=np.int32)
+        tn = TensorNetwork()
+
+        for seed, scale in enumerate([1.0, 2.0, 3.0], start=40):
+            data = jax.random.normal(jax.random.PRNGKey(seed), (3,)) * scale
+            t = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN, label="v"),))
+            if "A" not in tn.node_ids():
+                tn.add_node("A", t)
+            else:
+                tn.replace_tensor("A", t)
+
+            r_cached = tn.contract(cache=True)
+            r_fresh  = tn.contract(cache=False)
+            np.testing.assert_allclose(
+                r_cached.todense(), r_fresh.todense(), rtol=1e-5,
+                err_msg=f"Cache inconsistency after replace with scale={scale}"
+            )
+
+
 class TestBuildPEPS:
     def test_2x2_peps(self, u1):
         """Build a 2x2 PEPS grid."""

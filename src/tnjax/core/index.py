@@ -156,8 +156,11 @@ class TensorIndex:
         )
 
     def __hash__(self) -> int:
-        # Hash on identity of symmetry object, charges bytes, flow, label
-        return hash((id(self.symmetry), self.charges.tobytes(), int(self.flow), self.label))
+        # Use value-based hash consistent with __eq__: two TensorIndex objects
+        # that compare equal (same symmetry type+params, same charges, same flow,
+        # same label) must have the same hash. id(self.symmetry) would break this
+        # invariant when two separately-constructed symmetry instances are equal.
+        return hash((self.symmetry, self.charges.tobytes(), int(self.flow), self.label))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TensorIndex):

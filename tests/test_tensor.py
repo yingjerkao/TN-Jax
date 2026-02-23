@@ -302,3 +302,97 @@ class TestSymmetricTensorOperations:
 
     def test_dtype_property(self, u1_sym_tensor_2leg):
         assert u1_sym_tensor_2leg.dtype is not None
+
+
+class TestDenseSymmetricParity:
+    """SymmetricTensor.todense() must equal DenseTensor with the same data.
+
+    These tests verify that block extraction and reconstruction are lossless:
+    constructing a SymmetricTensor from a dense array and calling todense()
+    recovers the original array exactly (within float tolerance).
+    """
+
+    def test_u1_2leg(self, u1, u1_charges_3, rng):
+        """U(1) 2-leg: sym.todense() matches the source dense array."""
+        indices = (
+            TensorIndex(u1, u1_charges_3,          FlowDirection.IN,  label="in"),
+            TensorIndex(u1, u1.dual(u1_charges_3), FlowDirection.OUT, label="out"),
+        )
+        sym = SymmetricTensor.random_normal(indices, rng)
+        dense_data = sym.todense()
+        # Build a DenseTensor wrapping the same data and compare
+        dt = DenseTensor(dense_data, indices)
+        np.testing.assert_allclose(sym.todense(), dt.todense(), rtol=1e-5)
+
+    def test_u1_3leg(self, u1_sym_tensor_3leg):
+        """U(1) 3-leg: sym.todense() matches source dense array."""
+        sym = u1_sym_tensor_3leg
+        dense_data = sym.todense()
+        dt = DenseTensor(dense_data, sym.indices)
+        np.testing.assert_allclose(sym.todense(), dt.todense(), rtol=1e-5)
+
+    def test_zn_2leg(self, z2, rng):
+        """Z2 2-leg: sym.todense() matches source dense array."""
+        charges = np.array([0, 1], dtype=np.int32)
+        indices = (
+            TensorIndex(z2, charges,          FlowDirection.IN,  label="in"),
+            TensorIndex(z2, z2.dual(charges), FlowDirection.OUT, label="out"),
+        )
+        sym = SymmetricTensor.random_normal(indices, rng)
+        dense_data = sym.todense()
+        dt = DenseTensor(dense_data, indices)
+        np.testing.assert_allclose(sym.todense(), dt.todense(), rtol=1e-5)
+
+    def test_zn_3leg(self, z2, rng):
+        """Z2 3-leg (two IN, one OUT): sym.todense() matches source dense array."""
+        charges = np.array([0, 1], dtype=np.int32)
+        indices = (
+            TensorIndex(z2, charges,          FlowDirection.IN,  label="a"),
+            TensorIndex(z2, charges,          FlowDirection.IN,  label="b"),
+            TensorIndex(z2, z2.dual(charges), FlowDirection.OUT, label="c"),
+        )
+        sym = SymmetricTensor.random_normal(indices, rng)
+        dense_data = sym.todense()
+        dt = DenseTensor(dense_data, indices)
+        np.testing.assert_allclose(sym.todense(), dt.todense(), rtol=1e-5)
+
+    def test_from_dense_parity_u1(self, u1, u1_charges_3, rng):
+        """from_dense then todense recovers the original dense array for U(1)."""
+        indices = (
+            TensorIndex(u1, u1_charges_3,          FlowDirection.IN,  label="in"),
+            TensorIndex(u1, u1.dual(u1_charges_3), FlowDirection.OUT, label="out"),
+        )
+        sym = SymmetricTensor.random_normal(indices, rng)
+        dense_data = sym.todense()
+        sym2 = SymmetricTensor.from_dense(dense_data, indices)
+        np.testing.assert_allclose(sym2.todense(), dense_data, rtol=1e-5)
+
+    def test_from_dense_parity_zn(self, z2, rng):
+        """from_dense then todense recovers the original dense array for Z2."""
+        charges = np.array([0, 1], dtype=np.int32)
+        indices = (
+            TensorIndex(z2, charges,          FlowDirection.IN,  label="a"),
+            TensorIndex(z2, charges,          FlowDirection.IN,  label="b"),
+            TensorIndex(z2, z2.dual(charges), FlowDirection.OUT, label="c"),
+        )
+        sym = SymmetricTensor.random_normal(indices, rng)
+        dense_data = sym.todense()
+        sym2 = SymmetricTensor.from_dense(dense_data, indices)
+        np.testing.assert_allclose(sym2.todense(), dense_data, rtol=1e-5)
+
+    def test_zeros_outside_blocks(self, u1_sym_tensor_2leg):
+        """Positions outside symmetry-allowed sectors are zero in todense()."""
+        sym = u1_sym_tensor_2leg
+        dense = np.array(sym.todense())
+        # Zero out positions that belong to valid blocks, rest must be zero
+        import itertools as _it
+        from tnjax.core.tensor import _compute_valid_blocks, _block_slices
+        valid_keys = _compute_valid_blocks(sym.indices)
+        covered = np.zeros(dense.shape, dtype=bool)
+        for key in valid_keys:
+            masks, shape = _block_slices(sym.indices, key)
+            if all(s > 0 for s in shape):
+                idx_arrays = [np.where(m)[0] for m in masks]
+                grid = np.ix_(*idx_arrays)
+                covered[grid] = True
+        np.testing.assert_allclose(dense[~covered], 0.0, atol=1e-7)

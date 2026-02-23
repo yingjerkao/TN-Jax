@@ -35,11 +35,11 @@ def _compute_valid_blocks(
 ) -> list[BlockKey]:
     """Find all charge-sector tuples satisfying the symmetry conservation law.
 
-    For each combination of one charge per leg, checks whether:
-        sum_i(flow_i * charge_i) == identity
-
-    For Abelian symmetries this is a simple sum. The function iterates over
-    all unique charge values on each leg using the Cartesian product.
+    For each combination of one charge per leg, fuses the flow-adjusted charges
+    via symmetry.fuse_many() and keeps tuples where the result equals
+    symmetry.identity(). Delegating to fuse_many() ensures the symmetry's own
+    group arithmetic (e.g. Zn modular reduction) is applied correctly rather
+    than relying on hardcoded arithmetic in this function.
 
     Args:
         indices: Tuple of TensorIndex objects, one per tensor leg.
@@ -52,7 +52,6 @@ def _compute_valid_blocks(
 
     sym = indices[0].symmetry
     identity = sym.identity()
-    n = sym.n_values()
 
     # Collect unique charge values per leg (sorted for determinism)
     unique_charges_per_leg = [
@@ -61,11 +60,14 @@ def _compute_valid_blocks(
 
     valid_keys: list[BlockKey] = []
     for combo in itertools.product(*unique_charges_per_leg):
-        # Check conservation: sum(flow * charge) == identity
-        net = sum(int(idx.flow) * int(q) for idx, q in zip(indices, combo))
-        if n is not None:
-            net = net % n
-        if net == identity:
+        # Apply flow to each charge, then fuse via the symmetry object.
+        # flow=IN(+1) leaves charge unchanged; flow=OUT(-1) negates it before
+        # fusing. fuse_many handles modular arithmetic for Zn internally.
+        effective = [
+            np.array([int(idx.flow) * int(q)], dtype=np.int32)
+            for idx, q in zip(indices, combo)
+        ]
+        if int(sym.fuse_many(effective)[0]) == identity:
             valid_keys.append(tuple(int(q) for q in combo))
 
     return valid_keys
@@ -329,19 +331,17 @@ class SymmetricTensor(Tensor):
             return
         sym = self._indices[0].symmetry
         identity = sym.identity()
-        n = sym.n_values()
 
         for key in self._blocks:
-            net = sum(
-                int(idx.flow) * int(charge)
+            effective = [
+                np.array([int(idx.flow) * int(charge)], dtype=np.int32)
                 for idx, charge in zip(self._indices, key)
-            )
-            if n is not None:
-                net = net % n
-            if net != identity:
+            ]
+            fused_val = int(sym.fuse_many(effective)[0])
+            if fused_val != identity:
                 raise ValueError(
                     f"Block {key} violates charge conservation: "
-                    f"net={net}, expected identity={identity}"
+                    f"fused={fused_val}, expected identity={identity}"
                 )
 
     # --- Pytree interface ---
