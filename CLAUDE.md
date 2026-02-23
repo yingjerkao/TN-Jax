@@ -5,6 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Git Workflow
 
 - Always open a PR instead of pushing directly to `main`.
+- Merge PRs with `gh pr merge <number> --squash --delete-branch --auto` so CI must pass first.
+- `main` has branch protection: `Tests (Python 3.11)` and `Tests (Python 3.12)` must pass.
 
 ## Commands
 
