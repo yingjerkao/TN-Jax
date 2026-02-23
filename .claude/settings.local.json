@@ -17,7 +17,8 @@
       "Bash(JAX_TRACEBACK_FILTERING=off uv run pytest:*)",
       "Bash(wc -l find /Users/yjkao/TN-Jax/src -name \"__pycache__\" -exec ls -la {} ;)",
       "Bash(1:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(git add:*)"
     ]
   }
 }
