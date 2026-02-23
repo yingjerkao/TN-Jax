@@ -25,7 +25,14 @@
       "Bash(git push:*)",
       "Bash(head:*)",
       "Bash(/Users/yjkao/TN-Jax/.venv/bin/python:*)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(gh run:*)",
+      "Skill(claude-md-management:revise-claude-md)",
+      "Bash(uname:*)",
+      "Bash(git checkout:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh api:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
