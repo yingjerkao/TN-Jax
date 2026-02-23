@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:tensornetwork.org)",
+      "WebFetch(domain:docs.astral.sh)",
+      "WebFetch(domain:packaging.python.org)",
+      "WebFetch(domain:tensornetwork.readthedocs.io)",
+      "Bash(uv:*)",
+      "Bash(pip show:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:kaihsinwu.gitlab.io)",
+      "WebFetch(domain:scipost.org)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(awk:*)",
+      "Bash(JAX_TRACEBACK_FILTERING=off uv run pytest:*)",
+      "Bash(wc -l find /Users/yjkao/TN-Jax/src -name \"__pycache__\" -exec ls -la {} ;)",
+      "Bash(1:*)",
+      "Bash(wc:*)"
+    ]
+  }
+}
