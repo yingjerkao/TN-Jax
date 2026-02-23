@@ -32,8 +32,8 @@ uv run mypy src/
 
 The foundational type hierarchy:
 
-- **`symmetry.py`**: `U1Symmetry` and `ZnSymmetry` implement the `BaseSymmetry` interface (fuse, dual, identity, n_values). Charges are integer numpy arrays.
-- **`index.py`**: `TensorIndex` is a frozen dataclass carrying a `symmetry`, `charges` array, `flow` (IN/OUT), and string/integer `label`. Immutable and slot-based for memory efficiency.
+- **`symmetry.py`**: `U1Symmetry` and `ZnSymmetry` implement the `BaseSymmetry` interface (`fuse`, `dual`, `identity`, `n_values`, `fuse_many`, `is_conserved`). Charges are integer numpy arrays.
+- **`index.py`**: `TensorIndex` is a frozen dataclass carrying a `symmetry`, `charges` array, `flow` (IN/OUT), and string/integer `label`. Immutable and slot-based for memory efficiency. `__hash__` and `__eq__` are implemented explicitly because `frozen=True` with a `np.ndarray` field is not auto-hashable.
 - **`tensor.py`**: Two tensor types sharing a `Tensor` protocol:
   - `DenseTensor`: Full JAX array with index metadata
   - `SymmetricTensor`: Block-sparse dict mapping `BlockKey` (tuple of one charge per leg) → JAX array; only charge sectors satisfying conservation law are stored. Registered as JAX pytrees for jit/grad/vmap compatibility.
@@ -46,7 +46,7 @@ The foundational type hierarchy:
 
 ### Network Layer (`src/tnjax/network/network.py`)
 
-`TensorNetwork` is a networkx-based graph container (nodes = tensors, edges = shared labels). It caches contraction results keyed by `frozenset[NodeId]` and invalidates on structural changes. `build_mps()` and `build_peps()` are factory helpers.
+`TensorNetwork` is a networkx-based graph container (nodes = tensors, edges = shared labels). It caches contraction results keyed by `(frozenset[NodeId], output_labels, optimize)` and invalidates on any structural change. `build_mps()` and `build_peps()` are factory helpers.
 
 ### Algorithms (`src/tnjax/algorithms/`)
 
