@@ -29,6 +29,12 @@ Quick start::
     print(result.labels())    # ('phys', 'left', 'phys', 'right')
 """
 
+from tnjax.algorithms.auto_mpo import (
+    AutoMPO,
+    build_auto_mpo,
+    spin_half_ops,
+    spin_one_ops,
+)
 from tnjax.contraction.contractor import (
     contract,
     contract_with_subscripts,
@@ -69,6 +75,11 @@ __all__ = [
     "contract_with_subscripts",
     "truncated_svd",
     "qr_decompose",
+    # AutoMPO
+    "AutoMPO",
+    "build_auto_mpo",
+    "spin_half_ops",
+    "spin_one_ops",
     # Network
     "TensorNetwork",
     "build_mps",

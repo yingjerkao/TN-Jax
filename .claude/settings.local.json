@@ -21,7 +21,11 @@
       "Bash(git add:*)",
       "Bash(ruff check src/ tests/ 2>&1 || uvx ruff check src/ tests/ 2>&1)",
       "Bash(uvx ruff:*)",
-      "Skill(commit-commands:commit)"
+      "Skill(commit-commands:commit)",
+      "Bash(git push:*)",
+      "Bash(head:*)",
+      "Bash(/Users/yjkao/TN-Jax/.venv/bin/python:*)",
+      "Bash(tail:*)"
     ]
   }
 }

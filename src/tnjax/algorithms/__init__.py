@@ -1,5 +1,12 @@
 """Tensor network algorithms: DMRG, TRG, HOTRG, iPEPS."""
 
+from tnjax.algorithms.auto_mpo import (
+    AutoMPO,
+    HamiltonianTerm,
+    build_auto_mpo,
+    spin_half_ops,
+    spin_one_ops,
+)
 from tnjax.algorithms.dmrg import (
     DMRGConfig,
     DMRGResult,
@@ -17,6 +24,12 @@ from tnjax.algorithms.trg import (
 )
 
 __all__ = [
+    # AutoMPO
+    "AutoMPO",
+    "HamiltonianTerm",
+    "build_auto_mpo",
+    "spin_half_ops",
+    "spin_one_ops",
     # DMRG
     "DMRGConfig",
     "DMRGResult",
