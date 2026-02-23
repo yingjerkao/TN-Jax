@@ -144,7 +144,7 @@ class TestAutoMPOStructure:
         assert mpo.n_nodes() == 1
         # W should be shape (1, 2, 2, 1)
         tensor = mpo.get_tensor(0)
-        assert tensor.data.shape == (1, 2, 2, 1)
+        assert tensor.todense().shape == (1, 2, 2, 1)
 
     def test_nn_heisenberg_bond_dim_5(self):
         """NN Heisenberg should yield bond dimension 5 (3 two-site terms + done + vac)."""
@@ -500,8 +500,8 @@ class TestAutoMPOCompression:
             t_unc = mpo_uncompressed.get_tensor(i)
             t_cmp = mpo_compressed.get_tensor(i)
             # Left bond dimension
-            d_unc = t_unc.data.shape[0]
-            d_cmp = t_cmp.data.shape[0]
+            d_unc = t_unc.todense().shape[0]
+            d_cmp = t_cmp.todense().shape[0]
             assert d_cmp <= d_unc + 1, (
                 f"Site {i}: compressed left bond {d_cmp} > uncompressed {d_unc}"
             )
