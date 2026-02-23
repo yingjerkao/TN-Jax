@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Workflow
+
+- Always open a PR instead of pushing directly to `main`.
+
 ## Commands
 
 ```bash
@@ -68,3 +72,8 @@ All algorithms use **Python for-loops** (not `jax.lax.scan`) as outer iteration 
 - **opt_einsum** finds the optimal contraction path for multi-tensor networks before JAX executes it.
 - **Python-level DMRG/iPEPS loops**: necessary because bond dimensions are data-dependent and cannot be statically traced by JAX.
 - **Hypothesis** is used for property-based tests of symmetry axioms (associativity, dual involution, conservation law).
+
+## Known Gotchas
+
+- **NumPy ≥2.0**: Adding a Python `complex` scalar (even `1+0j`) into a `float64` array raises `UFuncOutputCastingError`. Extract `.real` or use `complex128` dtype explicitly.
+- **Local tests**: `uv run pytest` fails on macOS x86_64 (jaxlib has no wheel for this platform). Tests only run reliably in CI.
