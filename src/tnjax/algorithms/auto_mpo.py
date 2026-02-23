@@ -131,6 +131,11 @@ def _build_w_matrices(
     State index encoding:
       done = 0, in-flight 1..n, vacuum = D-1 (last index).
     """
+    # NumPy >=2.0 forbids adding complex128 into a float64 array.  Use
+    # complex128 only when at least one coefficient has a nonzero imaginary part.
+    needs_complex = any(t.coefficient.imag != 0.0 for t in terms)
+    w_dtype = np.complex128 if needs_complex else np.float64
+
     w_mats: list[np.ndarray] = []
 
     for i in range(L):
@@ -138,7 +143,7 @@ def _build_w_matrices(
         D_l = 1 if i == 0 else len(bond_states[i - 1]) + 2
         D_r = 1 if i == L - 1 else len(bond_states[i]) + 2
 
-        W = np.zeros((D_l, d, d, D_r), dtype=np.float64)
+        W = np.zeros((D_l, d, d, D_r), dtype=w_dtype)
 
         # State indices on each side
         # Left boundary: single state acts as vacuum (index 0).
@@ -172,15 +177,17 @@ def _build_w_matrices(
                 continue  # term not yet started or already finished
 
             op = op_dict.get(i, identity)
+            # Use real scalar when imaginary part is zero to stay within the W dtype.
+            coeff = term.coefficient if needs_complex else term.coefficient.real
 
             if min_s == max_s:
                 # Single-site term: vacuum → done in one step
-                W[vac_l, :, :, done_r] += term.coefficient * op
+                W[vac_l, :, :, done_r] += coeff * op
 
             elif i == min_s:
                 # First site of multi-site term: absorb coefficient here
                 state_r = bond_states[i][t_id]
-                W[vac_l, :, :, state_r] += term.coefficient * op
+                W[vac_l, :, :, state_r] += coeff * op
 
             elif i == max_s:
                 # Last site: close into done (coefficient already absorbed)
