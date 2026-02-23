@@ -160,6 +160,9 @@ class TensorIndex:
     flow:     FlowDirection
     label:    Label = ""    # The canonical identity of this leg
 
+    def __hash__(self) -> int:                   # must be explicit: np.ndarray is unhashable,
+        # so hash over (symmetry, tuple(charges), flow, label)
+    def __eq__(self, other) -> bool: ...         # symmetric with __hash__
     def dual(self) -> "TensorIndex":             # flips flow + applies sym.dual()
     def relabel(self, new_label: Label) -> "TensorIndex":  # new frozen copy with new label
     def is_dual_of(self, other) -> bool:         # strict: opposite flow + matching charges
@@ -169,6 +172,8 @@ class TensorIndex:
 **Label semantics:** Labels are the primary user-facing identity for each leg. Two legs with the same label on different tensors will be automatically contracted when `Contract()` or `TensorNetwork.contract()` is called. Labels survive non-contracted legs and propagate to the result tensor. Users must rename labels explicitly to avoid unintended contractions.
 
 `frozen=True, slots=True` for memory efficiency (millions created in large networks).
+
+**Hashing note:** `frozen=True` on a dataclass with a `np.ndarray` field raises `TypeError` at hash time because numpy arrays are not hashable. `__hash__` must be implemented explicitly, hashing over `tuple(charges)`. Without this, `TensorIndex` cannot be used as a dict key or in sets — which breaks `BlockKey` and the contraction cache.
 
 ### `tensor.py` — Depends on `symmetry.py`, `index.py`, JAX
 
@@ -221,7 +226,7 @@ class SymmetricTensor:
 
 **Critical design note:** Block structure (dict keys) is static Python-level data; JAX traces only through block array values. This means `jax.jit` can compile over `SymmetricTensor` when block keys are fixed (they are within a single sweep in DMRG). Recompilation only occurs when bond dimension changes after SVD truncation — acceptable since bond dim stabilizes quickly.
 
-Helper function `_compute_valid_blocks(indices)` returns all charge-sector tuples satisfying `sum_i(flow_i * charge_i) == identity`.
+Helper function `_compute_valid_blocks(indices)` returns all charge-sector tuples satisfying the symmetry's conservation law. Implementation: iterate over the Cartesian product of each index's charges, call `symmetry.fuse_many([flow_i * charge_i for each leg])`, and keep tuples where the result equals `symmetry.identity()`. Using `symmetry.fuse_many()` (rather than hardcoded `sum(flow * charge) == 0`) ensures Zn modular arithmetic is applied correctly by the symmetry object itself.
 
 ---
 
@@ -657,16 +662,20 @@ def compute_energy_ctm(peps, env, hamiltonian_gate) -> jax.Array:
 | Module | Test Type | Correctness Reference |
 |--------|-----------|-----------------------|
 | `symmetry.py` | Unit + hypothesis (group axioms) | Associativity, identity, inverse |
-| `index.py` | Unit | Charge arithmetic, duality |
-| `tensor.py` | Unit + JIT compat | Dense vs. symmetric norm/todense |
+| `index.py` | Unit + hash correctness | Charge arithmetic, duality, `__hash__`/`__eq__` round-trip |
+| `tensor.py` | Unit + JIT compat + **dense/symmetric parity** | `SymmetricTensor.todense()` matches `DenseTensor` on same data for small cases |
 | `contractor.py` | Unit + monkeypatch | Dense einsum reference |
-| `network.py` | Integration | Manual graph inspection |
-| `dmrg.py` | Integration | Exact diagonalization, L=4 Heisenberg |
-| `trg.py` | Integration | Onsager exact free energy for 2D Ising |
-| `hotrg.py` | Integration | TRG at same chi + Onsager |
-| `ipeps.py` | Integration | CTM convergence, energy sign |
+| `network.py` | Integration + **mutation/fuzz** | Cache correctness after add/remove/relabel/connect/disconnect sequences |
+| `dmrg.py` | Integration | Exact diagonalization, L≤8 Heisenberg; energy within `1e-8` absolute |
+| `trg.py` | Integration | Onsager free energy for 2D Ising; error < `0.01` at β=0.44, χ=16 |
+| `hotrg.py` | Integration | Same Onsager benchmark as TRG at equal χ; relative error < `0.001` |
+| `ipeps.py` | Integration | CTM environment fixed-point residual < `1e-6`; energy within tolerance band vs. known baseline |
 
 **Coverage target:** 90%+ line coverage. Hypothesis tests use `@settings(max_examples=200)` in CI.
+
+**Parity tests** (`test_tensor.py`): For small systems (D≤4, 2–3 legs), construct a `SymmetricTensor` and a `DenseTensor` with the same data; assert `jnp.allclose(symmetric.todense(), dense.data)`. Covers U(1) and Zn separately.
+
+**Mutation/fuzz tests** (`test_network.py`): Run random sequences of `add_node`, `remove_node`, `connect`, `disconnect`, `relabel_bond`, and `replace_tensor` on a `TensorNetwork`; after each mutation assert that `contract()` returns the same result as contracting the equivalent tensor list directly (no cache), verifying no stale cache entries.
 
 ---
 
