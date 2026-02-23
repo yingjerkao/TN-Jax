@@ -7,7 +7,12 @@ import pytest
 
 from tnjax.core.index import FlowDirection, TensorIndex
 from tnjax.core.symmetry import U1Symmetry, ZnSymmetry
-from tnjax.core.tensor import DenseTensor, SymmetricTensor, _compute_valid_blocks
+from tnjax.core.tensor import (
+    DenseTensor,
+    SymmetricTensor,
+    _block_slices,
+    _compute_valid_blocks,
+)
 
 
 class TestDenseTensor:
@@ -385,8 +390,6 @@ class TestDenseSymmetricParity:
         sym = u1_sym_tensor_2leg
         dense = np.array(sym.todense())
         # Zero out positions that belong to valid blocks, rest must be zero
-        import itertools as _it
-        from tnjax.core.tensor import _compute_valid_blocks, _block_slices
         valid_keys = _compute_valid_blocks(sym.indices)
         covered = np.zeros(dense.shape, dtype=bool)
         for key in valid_keys:

@@ -399,7 +399,7 @@ class TestCacheMutationFuzz:
         t = self._make_vec(u1, "old", seed=30)
         tn.add_node("A", t)
 
-        r1 = tn.contract()
+        tn.contract()
         tn.relabel_bond("A", "old", "new")
 
         r_cached = tn.contract(cache=True)

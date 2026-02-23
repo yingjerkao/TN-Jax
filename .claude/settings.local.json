@@ -18,7 +18,10 @@
       "Bash(wc -l find /Users/yjkao/TN-Jax/src -name \"__pycache__\" -exec ls -la {} ;)",
       "Bash(1:*)",
       "Bash(wc:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(ruff check src/ tests/ 2>&1 || uvx ruff check src/ tests/ 2>&1)",
+      "Bash(uvx ruff:*)",
+      "Skill(commit-commands:commit)"
     ]
   }
 }
