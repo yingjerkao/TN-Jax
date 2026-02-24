@@ -43,7 +43,7 @@ def truncated_svd_ad(
         ``(U, s, Vh)`` truncated to *chi*.
     """
     U, s, Vh = jnp.linalg.svd(M, full_matrices=False)
-    k = jnp.minimum(chi, s.shape[0])
+    k = min(chi, s.shape[0])
     return U[:, :k], s[:k], Vh[:k, :]
 
 
@@ -53,7 +53,7 @@ def _truncated_svd_ad_fwd(
 ) -> tuple[tuple[jax.Array, jax.Array, jax.Array], tuple]:
     """Forward pass — store full SVD for backward."""
     U_full, s_full, Vh_full = jnp.linalg.svd(M, full_matrices=False)
-    k = jnp.minimum(chi, s_full.shape[0])
+    k = min(chi, s_full.shape[0])
     U = U_full[:, :k]
     s = s_full[:k]
     Vh = Vh_full[:k, :]
@@ -345,10 +345,8 @@ def _ctm_converge_bwd(
 ) -> tuple[jax.Array]:
     """Backward pass via implicit differentiation of CTM fixed point.
 
-    Solves ``(I - J^T) lambda = g`` by fixed-point iteration:
-        lambda_{n+1} = g + J^T @ lambda_n
-
-    where J = d(ctm_step)/d(env) is the Jacobian of one CTM step.
+    Solves ``(I - J^T) lambda = g`` using GMRES (Lootens et al. PRR 7,
+    013237), where J = d(ctm_step)/d(env) is the Jacobian of one CTM step.
     Then ``dA = d(ctm_step)/dA^T @ lambda``.
     """
     from tnjax.algorithms.ipeps import CTMConfig, CTMEnvironment
@@ -370,23 +368,22 @@ def _ctm_converge_bwd(
         env_out = _gauge_fix_ctm(env_out)
         return tuple(env_out)
 
-    # Fixed-point iteration to solve (I - J_env^T) lambda = g
-    # lambda_{n+1} = g + J_env^T @ lambda_n
-    lam = g  # initial guess
-    max_fp_iter = min(config.max_iter, 50)
+    # Solve (I - J_env^T) lambda = g via GMRES (Lootens et al. PRR 7, 013237).
+    # GMRES converges superlinearly (Krylov acceleration) and directly
+    # monitors the residual norm, unlike the Neumann series which converges
+    # only geometrically with rate equal to the spectral radius.
+    from jax.scipy.sparse.linalg import gmres as jax_gmres
 
-    for _ in range(max_fp_iter):
-        # Compute J_env^T @ lam via VJP of step_fn w.r.t. env
+    def apply_I_minus_Jt(v):
+        """Apply (I - J_env^T) to vector v (a tuple of arrays)."""
         _, vjp_fn = jax.vjp(lambda e: step_fn(A, e), env_tuple)
-        Jt_lam = vjp_fn(lam)[0]  # tuple
-        # lambda_{n+1} = g + J_env^T @ lambda_n
-        lam_new = tuple(gi + ji for gi, ji in zip(g, Jt_lam))
+        Jt_v = vjp_fn(v)[0]
+        return tuple(vi - ji for vi, ji in zip(v, Jt_v))
 
-        # Check convergence
-        diff = sum(float(jnp.max(jnp.abs(a - b))) for a, b in zip(lam_new, lam))
-        lam = lam_new
-        if diff < config.conv_tol:
-            break
+    max_fp_iter = min(config.max_iter, 50)
+    lam, info = jax_gmres(
+        apply_I_minus_Jt, g, x0=g, tol=config.conv_tol, maxiter=max_fp_iter,
+    )
 
     # Now compute dA = d(step)/dA^T @ lambda
     _, vjp_A_fn = jax.vjp(lambda a: step_fn(a, env_tuple), A)
