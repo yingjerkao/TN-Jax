@@ -34,7 +34,7 @@ import numpy as np
 from tnjax.contraction.contractor import contract, qr_decompose, truncated_svd
 from tnjax.core.index import FlowDirection, TensorIndex
 from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor, Tensor
+from tnjax.core.tensor import DenseTensor, SymmetricTensor, Tensor
 from tnjax.network.network import TensorNetwork
 
 
@@ -108,15 +108,10 @@ def dmrg(
         DMRGResult with energy, sweep history, optimized MPS, and diagnostics.
     """
     L = hamiltonian.n_nodes()
-    # Convert any SymmetricTensor initial states to DenseTensor.  The DMRG
-    # engine operates entirely in dense mode (all contractions go through
-    # .todense()), so the block-sparse structure is not preserved across sweeps.
-    mps_tensors: list[Tensor] = [
-        DenseTensor(t.todense(), t.indices)
-        if not isinstance(t, DenseTensor)
-        else t
-        for t in [initial_mps.get_tensor(i) for i in range(L)]
-    ]
+    # Preserve tensor types (DenseTensor or SymmetricTensor) through sweeps.
+    # Environment updates use .todense() internally, but MPS tensors keep
+    # their original type so that block-sparse SVD is used when applicable.
+    mps_tensors: list[Tensor] = [initial_mps.get_tensor(i) for i in range(L)]
     mpo_tensors = [hamiltonian.get_tensor(i) for i in range(L)]
 
     # Right-canonicalize the initial MPS (skipped: label-based QR may reorder legs)
@@ -607,7 +602,10 @@ def _two_site_update(
         else:
             theta_opt_dense = theta_opt_dense[:, :, :, 0]  # remove right trivial dim
 
-    theta_opt = DenseTensor(theta_opt_dense, theta_indices)
+    if isinstance(theta, SymmetricTensor):
+        theta_opt = SymmetricTensor.from_dense(theta_opt_dense, theta_indices, tol=1e-8)
+    else:
+        theta_opt = DenseTensor(theta_opt_dense, theta_indices)
     return theta_opt, energy
 
 
@@ -668,7 +666,10 @@ def _one_site_update(
             site_opt_dense = site_opt_dense[0, :, :]
         else:
             site_opt_dense = site_opt_dense[:, :, 0]
-    site_opt = DenseTensor(site_opt_dense, site.indices)
+    if isinstance(site, SymmetricTensor):
+        site_opt = SymmetricTensor.from_dense(site_opt_dense, site.indices, tol=1e-8)
+    else:
+        site_opt = DenseTensor(site_opt_dense, site.indices)
     return site_opt, energy
 
 
