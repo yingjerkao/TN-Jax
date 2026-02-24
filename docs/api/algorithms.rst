@@ -1,0 +1,76 @@
+Algorithms
+==========
+
+DMRG
+----
+
+.. autoclass:: tnjax.algorithms.dmrg.DMRGConfig
+   :members:
+   :no-index:
+
+.. autoclass:: tnjax.algorithms.dmrg.DMRGResult
+   :members:
+   :no-index:
+
+.. autofunction:: tnjax.algorithms.dmrg.dmrg
+
+.. autofunction:: tnjax.algorithms.dmrg.build_mpo_heisenberg
+
+.. autofunction:: tnjax.algorithms.dmrg.build_random_mps
+
+TRG
+---
+
+.. autoclass:: tnjax.algorithms.trg.TRGConfig
+   :members:
+   :no-index:
+
+.. autofunction:: tnjax.algorithms.trg.trg
+
+.. autofunction:: tnjax.algorithms.trg.compute_ising_tensor
+
+.. autofunction:: tnjax.algorithms.trg.ising_free_energy_exact
+
+HOTRG
+-----
+
+.. autoclass:: tnjax.algorithms.hotrg.HOTRGConfig
+   :members:
+   :no-index:
+
+.. autofunction:: tnjax.algorithms.hotrg.hotrg
+
+iPEPS
+-----
+
+.. autoclass:: tnjax.algorithms.ipeps.iPEPSConfig
+   :members:
+   :no-index:
+
+.. autoclass:: tnjax.algorithms.ipeps.CTMConfig
+   :members:
+   :no-index:
+
+.. autoclass:: tnjax.algorithms.ipeps.CTMEnvironment
+   :members:
+   :no-index:
+
+.. autofunction:: tnjax.algorithms.ipeps.ipeps
+
+.. autofunction:: tnjax.algorithms.ipeps.ctm
+
+AutoMPO
+-------
+
+.. autoclass:: tnjax.algorithms.auto_mpo.AutoMPO
+   :members:
+
+.. autoclass:: tnjax.algorithms.auto_mpo.HamiltonianTerm
+   :members:
+   :no-index:
+
+.. autofunction:: tnjax.algorithms.auto_mpo.build_auto_mpo
+
+.. autofunction:: tnjax.algorithms.auto_mpo.spin_half_ops
+
+.. autofunction:: tnjax.algorithms.auto_mpo.spin_one_ops

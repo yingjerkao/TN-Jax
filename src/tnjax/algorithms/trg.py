@@ -1,24 +1,20 @@
 """Tensor Renormalization Group (TRG) algorithm.
 
 TRG is a coarse-graining algorithm for 2D classical partition functions
-on a square lattice. Starting from a single-site tensor T_{udlr} (up, down,
+on a square lattice. Starting from a single-site tensor ``T_{udlr}`` (up, down,
 left, right), TRG iteratively reduces the lattice by a factor of 2 in each
 step via SVD splitting and tensor contraction.
 
 Reference: Levin & Nave, PRL 99, 120601 (2007).
 
-Algorithm per step:
-  1. SVD split horizontally: T[u,d,l,r] -> S_l[u,d,k] * S_r[u,d,k]  (approx)
-     Actually: T[u,l,d,r] -> (reshape to matrix [ul, dr]) -> U S V^T
-     -> F_l[u,l,k] * F_r[k,d,r]
-  2. Similarly split vertically: T -> F_u[u,l,k] * F_d[k,d,r]
-  3. Contract 4 half-tensors around a plaquette:
-     T_new[u,d,l,r] = sum_{k1,k2,k3,k4} F_l[u,k2,k1] * F_r[k1,d,k3]
-                                         * F_u[k2,u,k4] * F_d[k4,d,r]
-     (exact form depends on orientation convention)
+Algorithm per step::
+
+    1. SVD split horizontally: T[u,d,l,r] -> F_l[u,l,k] * F_r[k,d,r]
+    2. Similarly split vertically: T -> F_u[u,r,k] * F_d[k,d,l]
+    3. Contract 4 half-tensors around a plaquette -> T_new
 
 The partition function estimate grows exponentially; we track the
-log-normalization at each step to compute log(Z)/N.
+log-normalization at each step to compute ``log(Z)/N``.
 """
 
 from __future__ import annotations
@@ -57,14 +53,14 @@ def trg(
 ) -> jax.Array:
     """TRG coarse-graining for a 2D square lattice partition function.
 
-    The input tensor T_{u,d,l,r} (up, down, left, right legs) represents
+    The input tensor ``T_{u,d,l,r}`` (up, down, left, right legs) represents
     a single site tensor placed on every site of an infinite 2D square lattice.
-    TRG iteratively coarse-grains the lattice by:
-      1. SVD splitting: T -> half-tensors
-      2. Contracting 4 half-tensors around a plaquette -> new coarse tensor
+    TRG iteratively coarse-grains the lattice by SVD splitting into
+    half-tensors, then contracting four half-tensors around a plaquette
+    to form the new coarse tensor.
 
     The partition function estimate is tracked via log normalization:
-        log(Z)/N = sum_steps log(norm_step) / 4^step
+    ``log(Z)/N = sum_steps log(norm_step) / 4^step``.
 
     Args:
         tensor: Initial site tensor, a DenseTensor with 4 legs labeled

@@ -1,7 +1,8 @@
-"""Tensor contraction engine with label-based API.
+r"""Tensor contraction engine with label-based API.
 
-Primary API:
-    contract(*tensors, output_labels=None, optimize="auto") -> Tensor
+Primary API::
+
+    contract(\*tensors, output_labels=None, optimize="auto") -> Tensor
 
 Labels drive contraction: legs with the same label across different tensors
 are contracted (summed over). Free labels (unique to one tensor) become
@@ -11,7 +12,8 @@ Under the hood, labels are translated to einsum subscript strings which
 are fed to opt_einsum for optimal contraction path finding, then executed
 with the JAX backend.
 
-Lower-level API:
+Lower-level API::
+
     contract_with_subscripts(tensors, subscripts, output_indices, optimize) -> Tensor
     truncated_svd(tensor, left_labels, right_labels, ...) -> (U, s, Vh)
     qr_decompose(tensor, left_labels, right_labels, ...) -> (Q, R)
@@ -393,14 +395,15 @@ def truncated_svd(
     The new bond leg (connecting U and Vh factors) is given label
     new_bond_label, making it immediately usable in label-based contractions.
 
-    Output labels:
-        U:  (*left_labels, new_bond_label)
-        Vh: (new_bond_label, *right_labels)
+    Output labels::
+
+        U:  (left_labels..., new_bond_label)
+        Vh: (new_bond_label, right_labels...)
 
     Note:
         This function is not JIT-able as a whole because the truncation
         cutoff is determined dynamically from singular values (dynamic shape).
-        Apply @jax.jit to the inner SVD step only; call this at Python level.
+        Apply ``@jax.jit`` to the inner SVD step only; call this at Python level.
 
     Args:
         tensor:               Tensor to decompose.
@@ -412,9 +415,9 @@ def truncated_svd(
         normalize:            Normalize singular values to sum to 1.
 
     Returns:
-        (U_tensor, singular_values, Vh_tensor)
-        U has labels (*left_labels, new_bond_label).
-        Vh has labels (new_bond_label, *right_labels).
+        ``(U_tensor, singular_values, Vh_tensor)``
+        -- U has labels ``(left_labels..., new_bond_label)``.
+        Vh has labels ``(new_bond_label, right_labels...)``.
         singular_values is a 1-D JAX float array.
 
     Raises:
@@ -544,9 +547,10 @@ def qr_decompose(
 
     Reshapes tensor into a matrix, performs QR, then reshapes back.
 
-    Output labels:
-        Q: (*left_labels, new_bond_label)
-        R: (new_bond_label, *right_labels)
+    Output labels::
+
+        Q: (left_labels..., new_bond_label)
+        R: (new_bond_label, right_labels...)
 
     Args:
         tensor:          Tensor to decompose.

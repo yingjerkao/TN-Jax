@@ -112,16 +112,13 @@ def ipeps(
 ) -> tuple[float, TensorNetwork, CTMEnvironment]:
     """Run iPEPS simple update + CTM for a 2D quantum lattice model.
 
-    Algorithm:
-    1. Simple update (imaginary time evolution):
-       a. For each nearest-neighbor bond, apply exp(-dt * H_bond).
-       b. SVD to restore tensor product form; truncate to D.
-       c. Update "lambda" matrices (diagonal matrices approximating the
-          environment along each bond, used in the simple update).
-    2. CTM environment computation:
-       a. Initialize environment tensors.
-       b. Iteratively absorb rows/columns until environment converges.
-    3. Compute energy per site using CTM environment.
+    Algorithm overview:
+
+    1. Simple update (imaginary time evolution) -- apply ``exp(-dt * H_bond)``
+       on each bond, SVD-truncate to D, update lambda matrices.
+    2. CTM environment computation -- initialise and iteratively absorb
+       rows/columns until convergence.
+    3. Compute energy per site using the CTM environment.
 
     Args:
         hamiltonian_gate: The 2-site Hamiltonian as a 4-leg tensor of shape

@@ -4,13 +4,15 @@ DMRG finds the ground state (or low-lying eigenstates) of a 1D quantum
 Hamiltonian given as a Matrix Product Operator (MPO).
 
 Architecture decisions:
-- The outer sweep loop is a Python for-loop (not jax.lax.scan) because bond
+
+- The outer sweep loop is a Python for-loop (not ``jax.lax.scan``) because bond
   dimensions change after each SVD truncation, preventing JIT across sweeps.
-- The effective Hamiltonian matvec is @jax.jit compiled for performance.
-- Lanczos eigensolver uses jax.lax.while_loop for static shapes inside JIT.
+- The effective Hamiltonian matvec is ``@jax.jit`` compiled for performance.
+- Lanczos eigensolver uses ``jax.lax.while_loop`` for static shapes inside JIT.
 - Environment tensors (left/right blocks) are stored as Python lists of Tensor.
 
-Label conventions:
+Label conventions::
+
     MPS site tensors:    legs = ("v{i-1}_{i}", "p{i}", "v{i}_{i+1}")
                          boundary: left site has ("p0", "v0_1"),
                                    right site has ("v{L-2}_{L-1}", "p{L-1}")

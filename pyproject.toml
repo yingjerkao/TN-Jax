@@ -36,6 +36,14 @@ dev = [
     "mypy>=1.10",
     "twine>=5.0",
 ]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-autodoc-typehints>=2.0",
+    "sphinx-copybutton>=0.5",
+    "furo>=2024.0",
+    "myst-parser>=3.0",
+    "sphinx-design>=0.6",
+]
 
 [project.urls]
 Homepage = "https://github.com/yjkao/TN-Jax"
