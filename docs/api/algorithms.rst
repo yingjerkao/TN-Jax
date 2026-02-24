@@ -59,6 +59,30 @@ iPEPS
 
 .. autofunction:: tnjax.algorithms.ipeps.ctm
 
+.. autofunction:: tnjax.algorithms.ipeps.optimize_gs_ad
+
+AD Utilities
+------------
+
+.. autofunction:: tnjax.algorithms.ad_utils.truncated_svd_ad
+
+.. autofunction:: tnjax.algorithms.ad_utils.ctm_converge
+
+iPEPS Excitations
+-----------------
+
+.. autoclass:: tnjax.algorithms.ipeps_excitations.ExcitationConfig
+   :members:
+   :no-index:
+
+.. autoclass:: tnjax.algorithms.ipeps_excitations.ExcitationResult
+   :members:
+   :no-index:
+
+.. autofunction:: tnjax.algorithms.ipeps_excitations.compute_excitations
+
+.. autofunction:: tnjax.algorithms.ipeps_excitations.make_momentum_path
+
 AutoMPO
 -------
 

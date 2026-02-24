@@ -50,6 +50,13 @@ from tnjax.algorithms.ipeps import (
     ctm,
     ipeps,
     iPEPSConfig,
+    optimize_gs_ad,
+)
+from tnjax.algorithms.ipeps_excitations import (
+    ExcitationConfig,
+    ExcitationResult,
+    compute_excitations,
+    make_momentum_path,
 )
 from tnjax.algorithms.trg import (
     TRGConfig,
@@ -123,6 +130,12 @@ __all__ = [
     "CTMEnvironment",
     "ipeps",
     "ctm",
+    "optimize_gs_ad",
+    # iPEPS Excitations
+    "ExcitationConfig",
+    "ExcitationResult",
+    "compute_excitations",
+    "make_momentum_path",
     # Network
     "TensorNetwork",
     "build_mps",
