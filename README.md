@@ -8,7 +8,11 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 - **Label-based contraction** — legs are identified by string/integer labels; shared labels are automatically contracted (Cytnx-style)
 - **opt_einsum integration** — optimal contraction path finding for multi-tensor contractions
 - **Network class** — graph-based tensor network container with contraction caching
-- **Algorithms** — DMRG, TRG, HOTRG, iPEPS (with CTM environment)
+- **Algorithms** — DMRG, TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
+- **AutoMPO** — build Hamiltonian MPOs from symbolic operator descriptions (custom couplings, NNN, arbitrary spin)
+- **AD-based iPEPS optimization** — gradient optimization via implicit differentiation through CTM fixed point (Lootens et al. PRR 7, 013237)
+- **Quasiparticle excitations** — iPEPS excitation spectra at arbitrary Brillouin-zone momenta (Ponsioen et al. 2022)
+- **Block-sparse SVD and QR** — native symmetry-aware decompositions for `SymmetricTensor`
 - **Extensible symmetry system** — non-Abelian symmetry interface for future SU(2) support
 
 ## Installation
@@ -98,6 +102,66 @@ free_energy = trg(T, config)
 print(f"Free energy per site: {free_energy:.8f}")
 ```
 
+## AutoMPO Example
+
+```python
+from tnjax import AutoMPO, build_auto_mpo
+
+# Class-based interface: build a Heisenberg chain
+L = 10
+auto = AutoMPO(L)
+for i in range(L - 1):
+    auto += (1.0, "Sz", i, "Sz", i + 1)
+    auto += (0.5, "Sp", i, "Sm", i + 1)
+    auto += (0.5, "Sm", i, "Sp", i + 1)
+mpo = auto.to_mpo()
+
+# Or use the functional interface with custom operators
+import numpy as np
+custom_ops = {
+    "X": np.array([[0.0, 1.0], [1.0, 0.0]]),
+    "Z": np.array([[1.0, 0.0], [0.0, -1.0]]),
+    "Id": np.eye(2),
+}
+terms = [(1.0, "Z", i, "Z", i + 1) for i in range(L - 1)]
+terms += [(0.5, "X", i) for i in range(L)]
+mpo = build_auto_mpo(terms, L=L, site_ops=custom_ops)
+```
+
+## iPEPS AD Optimization and Excitations
+
+```python
+import jax.numpy as jnp
+from tnjax import (
+    iPEPSConfig, CTMConfig, optimize_gs_ad,
+    ExcitationConfig, compute_excitations, make_momentum_path,
+)
+
+# Build a 2-site Heisenberg gate
+Sz = 0.5 * jnp.array([[1.0, 0.0], [0.0, -1.0]])
+Sp = jnp.array([[0.0, 1.0], [0.0, 0.0]])
+Sm = jnp.array([[0.0, 0.0], [1.0, 0.0]])
+gate = jnp.einsum("ij,kl->ikjl", Sz, Sz) \
+     + 0.5 * (jnp.einsum("ij,kl->ikjl", Sp, Sm)
+             + jnp.einsum("ij,kl->ikjl", Sm, Sp))
+
+# AD ground-state optimization (Lootens et al. PRR 7, 013237)
+config = iPEPSConfig(
+    max_bond_dim=2,
+    ctm=CTMConfig(chi=16, max_iter=50),
+    gs_num_steps=200,
+    gs_learning_rate=1e-3,
+)
+A_opt, env, E_gs = optimize_gs_ad(gate, None, config)
+print(f"Ground-state energy: {E_gs:.6f}")
+
+# Quasiparticle excitations (Ponsioen et al. 2022)
+momenta = make_momentum_path("brillouin", num_points=20)
+exc_config = ExcitationConfig(num_excitations=3, chi=16)
+result = compute_excitations(A_opt, env, gate, E_gs, momenta, exc_config)
+print(result.energies.shape)  # (20, 3)
+```
+
 ## Symmetry System
 
 ```python
@@ -130,6 +194,21 @@ uv run pytest tests/ -v
 # Lint
 uv run ruff check src/ tests/
 ```
+
+## Documentation
+
+Full API documentation is built with Sphinx:
+
+```bash
+cd docs && make html
+```
+
+The generated HTML is in `docs/_build/html/`.
+
+## References
+
+- T. Lootens, B. Vanhecke, F. Verstraete, *PRR* **7**, 013237 (2025) — AD-based iPEPS ground-state optimization
+- L. Ponsioen, F. F. Assaad, P. Corboz, *SciPost Phys.* **12**, 006 (2022) — Quasiparticle excitations for iPEPS
 
 ## License
 
