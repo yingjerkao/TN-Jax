@@ -27,6 +27,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tnjax.algorithms.ad_utils import truncated_svd_ad
 from tnjax.core.index import FlowDirection, TensorIndex
 from tnjax.core.symmetry import U1Symmetry
 from tnjax.core.tensor import DenseTensor
@@ -608,8 +609,8 @@ def _absorb_edge(T: jax.Array, a: jax.Array, chi: int, axis: int) -> jax.Array:
     # Truncate the first and last dims back to chi
     # Reshape to matrix for SVD: (chi*D2_par0, D2_open * chi*D2_par1)
     mat = Ta.reshape(s[0] * s[1], s[2] * s[3] * s[4])
-    U, sig, Vh = jnp.linalg.svd(mat, full_matrices=False)
-    n = min(chi, len(sig))
+    U, sig, Vh = truncated_svd_ad(mat, chi)
+    n = sig.shape[0]
     # Left isometry: (chi*D2_par0) -> chi
     P_l = U[:, :n]  # (chi*D2_par0, n)
     # Right isometry from Vh: (n, D2_open * chi*D2_par1)
@@ -622,8 +623,8 @@ def _absorb_edge(T: jax.Array, a: jax.Array, chi: int, axis: int) -> jax.Array:
     # The last dim might be > chi, truncate via another SVD
     if T_new.shape[2] > chi:
         mat2 = T_new.reshape(n * D2_open, T_new.shape[2])
-        U2, s2, Vh2 = jnp.linalg.svd(mat2, full_matrices=False)
-        n2 = min(chi, len(s2))
+        U2, s2, Vh2 = truncated_svd_ad(mat2, chi)
+        n2 = s2.shape[0]
         T_new = (U2[:, :n2] * s2[:n2][None, :]) @ Vh2[:n2, :chi]
         T_new = T_new.reshape(n, D2_open, min(chi, T_new.shape[1]))
 
@@ -736,9 +737,9 @@ def _truncate_to_chi(M: jax.Array, chi: int) -> jax.Array:
     """Truncate a 2D matrix to chi x chi via SVD."""
     if M.ndim != 2:
         M = M.reshape(M.shape[0], -1)
-    U, s, Vh = jnp.linalg.svd(M, full_matrices=False)
-    n = min(chi, U.shape[1], Vh.shape[0])
-    return (U[:chi, :n] * s[:n][None, :]) @ Vh[:n, :chi]
+    U, s, Vh = truncated_svd_ad(M, chi)
+    # truncated_svd_ad already returns truncated (U[:,:k], s[:k], Vh[:k,:])
+    return (U[:chi, :] * s[None, :]) @ Vh[:, :chi]
 
 
 def _renormalize_env(env: CTMEnvironment) -> CTMEnvironment:

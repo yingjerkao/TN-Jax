@@ -252,3 +252,55 @@ class TestGaugeFix:
         env_fixed = _gauge_fix_ctm(random_env)
         for t_orig, t_fixed in zip(random_env, env_fixed):
             assert t_orig.shape == t_fixed.shape
+
+
+class TestGMRESBackward:
+    """Validate GMRES-based backward pass for ctm_converge."""
+
+    def test_gmres_backward_finite_gradient(self):
+        """GMRES backward pass should produce finite, nonzero gradients."""
+        key = jax.random.PRNGKey(123)
+        D, d = 2, 2
+        A = jax.random.normal(key, (D, D, D, D, d))
+        A = A / (jnp.linalg.norm(A) + 1e-10)
+
+        config_tuple = (4, 10, 1e-6, 1)  # chi, max_iter, conv_tol, renormalize
+
+        # Simple SzSz Hamiltonian
+        gate = jnp.diag(jnp.array([0.25, -0.25, -0.25, 0.25])).reshape(d, d, d, d)
+
+        def energy_fn(A_in):
+            A_norm = A_in / (jnp.linalg.norm(A_in) + 1e-10)
+            env_tuple = ctm_converge(A_norm, config_tuple)
+            env = CTMEnvironment(*env_tuple)
+            from tnjax.algorithms.ipeps import compute_energy_ctm
+            return compute_energy_ctm(A_norm, env, gate, d)
+
+        grad = jax.grad(energy_fn)(A)
+        assert jnp.all(jnp.isfinite(grad)), "GMRES backward: gradient contains NaN/Inf"
+        assert jnp.max(jnp.abs(grad)) > 1e-15, "GMRES backward: gradient is all zeros"
+
+    def test_gmres_backward_deterministic(self):
+        """GMRES backward pass should be deterministic across calls."""
+        key = jax.random.PRNGKey(77)
+        D, d = 2, 2
+        A = jax.random.normal(key, (D, D, D, D, d))
+        A = A / (jnp.linalg.norm(A) + 1e-10)
+
+        config_tuple = (4, 10, 1e-6, 1)
+        gate = jnp.diag(jnp.array([0.25, -0.25, -0.25, 0.25])).reshape(d, d, d, d)
+
+        def energy_fn(A_in):
+            A_norm = A_in / (jnp.linalg.norm(A_in) + 1e-10)
+            env_tuple = ctm_converge(A_norm, config_tuple)
+            env = CTMEnvironment(*env_tuple)
+            from tnjax.algorithms.ipeps import compute_energy_ctm
+            return compute_energy_ctm(A_norm, env, gate, d)
+
+        # Two independent gradient calls should give the same result
+        grad1 = jax.grad(energy_fn)(A)
+        grad2 = jax.grad(energy_fn)(A)
+        assert jnp.allclose(grad1, grad2, atol=1e-10), (
+            f"GMRES backward not deterministic: max diff = "
+            f"{float(jnp.max(jnp.abs(grad1 - grad2)))}"
+        )
