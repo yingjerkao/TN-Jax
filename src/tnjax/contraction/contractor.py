@@ -375,6 +375,377 @@ def contract_with_subscripts(
         )
 
 
+# ---------- Block-sparse decomposition helpers ----------
+
+def _group_blocks_by_bond_charge(
+    tensor: SymmetricTensor,
+    left_leg_positions: list[int],
+    right_leg_positions: list[int],
+) -> dict[int, list[tuple[BlockKey, BlockKey, jax.Array]]]:
+    """Group tensor blocks by their bond charge sector.
+
+    For each block, the "bond charge" is determined by fusing the flow-weighted
+    charges of the left legs.  Blocks sharing the same bond charge belong to
+    the same diagonal block in the matrix representation.
+
+    Args:
+        tensor:              SymmetricTensor to decompose.
+        left_leg_positions:  Axis positions belonging to the left (U / Q) factor.
+        right_leg_positions: Axis positions belonging to the right (Vh / R) factor.
+
+    Returns:
+        Dict mapping bond charge ``q`` to a list of
+        ``(left_subkey, right_subkey, block_array)`` tuples.
+    """
+    sym = tensor.indices[0].symmetry
+    grouped: dict[int, list[tuple[BlockKey, BlockKey, jax.Array]]] = {}
+
+    for key, block in tensor.blocks.items():
+        # Compute bond charge from left legs
+        effective = [
+            np.array([int(tensor.indices[i].flow) * int(key[i])], dtype=np.int32)
+            for i in left_leg_positions
+        ]
+        q = int(sym.fuse_many(effective)[0])
+
+        left_subkey = tuple(key[i] for i in left_leg_positions)
+        right_subkey = tuple(key[i] for i in right_leg_positions)
+        grouped.setdefault(q, []).append((left_subkey, right_subkey, block))
+
+    return grouped
+
+
+def _truncated_svd_symmetric(
+    tensor: SymmetricTensor,
+    left_labels: Sequence[Label],
+    right_labels: Sequence[Label],
+    max_singular_values: int | None,
+    max_truncation_err: float | None,
+    new_bond_label: Label,
+    normalize: bool,
+) -> tuple[SymmetricTensor, jax.Array, SymmetricTensor]:
+    """Block-diagonal SVD for SymmetricTensor.
+
+    Each charge sector is decomposed independently, then singular values
+    are merged and truncated globally.
+    """
+    all_labels = tensor.labels()
+    label_to_axis = {lbl: i for i, lbl in enumerate(all_labels)}
+    left_axes = [label_to_axis[lbl] for lbl in left_labels]
+    right_axes = [label_to_axis[lbl] for lbl in right_labels]
+    left_indices = tuple(tensor.indices[i] for i in left_axes)
+    right_indices = tuple(tensor.indices[i] for i in right_axes)
+
+    grouped = _group_blocks_by_bond_charge(tensor, left_axes, right_axes)
+
+    # For each charge sector, we need to know the row/col dimensions of the
+    # block-diagonal matrix.  Rows are indexed by unique left_subkeys within
+    # the sector; columns by unique right_subkeys.
+
+    # Per-sector SVD results
+    sector_results: dict[int, tuple[jax.Array, jax.Array, jax.Array,
+                                     list[BlockKey], list[BlockKey],
+                                     list[int], list[int]]] = {}
+
+    for q, entries in grouped.items():
+        # Collect unique left / right subkeys (preserving order for determinism)
+        left_subkeys_seen: dict[BlockKey, int] = {}
+        right_subkeys_seen: dict[BlockKey, int] = {}
+        for lk, rk, _ in entries:
+            if lk not in left_subkeys_seen:
+                left_subkeys_seen[lk] = len(left_subkeys_seen)
+            if rk not in right_subkeys_seen:
+                right_subkeys_seen[rk] = len(right_subkeys_seen)
+
+        left_subkeys = list(left_subkeys_seen.keys())
+        right_subkeys = list(right_subkeys_seen.keys())
+
+        # Determine row size per left_subkey and col size per right_subkey
+        # by computing the product of charge-multiplicities along each leg.
+        left_row_sizes: list[int] = []
+        for lk in left_subkeys:
+            size = 1
+            for leg_pos, charge_val in zip(left_axes, lk):
+                idx = tensor.indices[leg_pos]
+                size *= int(np.sum(idx.charges == charge_val))
+            left_row_sizes.append(size)
+
+        right_col_sizes: list[int] = []
+        for rk in right_subkeys:
+            size = 1
+            for leg_pos, charge_val in zip(right_axes, rk):
+                idx = tensor.indices[leg_pos]
+                size *= int(np.sum(idx.charges == charge_val))
+            right_col_sizes.append(size)
+
+        total_rows = sum(left_row_sizes)
+        total_cols = sum(right_col_sizes)
+
+        if total_rows == 0 or total_cols == 0:
+            continue
+
+        # Assemble the block matrix for this charge sector
+        matrix = jnp.zeros((total_rows, total_cols), dtype=tensor.dtype)
+        for lk, rk, block in entries:
+            li = left_subkeys_seen[lk]
+            ri = right_subkeys_seen[rk]
+            row_start = sum(left_row_sizes[:li])
+            col_start = sum(right_col_sizes[:ri])
+            flat_block = block.reshape(left_row_sizes[li], right_col_sizes[ri])
+            matrix = matrix.at[row_start:row_start + left_row_sizes[li],
+                               col_start:col_start + right_col_sizes[ri]].set(flat_block)
+
+        # SVD this sector
+        U_q, s_q, Vh_q = jnp.linalg.svd(matrix, full_matrices=False)
+        sector_results[q] = (U_q, s_q, Vh_q, left_subkeys, right_subkeys,
+                             left_row_sizes, right_col_sizes)
+
+    # Global truncation: merge all singular values across sectors
+    all_sv_pairs: list[tuple[float, int, int]] = []  # (value, sector_q, index_in_sector)
+    for q, (_, s_q, _, _, _, _, _) in sector_results.items():
+        s_np = np.array(s_q)
+        for i, val in enumerate(s_np):
+            all_sv_pairs.append((float(val), q, i))
+
+    # Sort descending by singular value
+    all_sv_pairs.sort(key=lambda x: -x[0])
+
+    # Determine global keep count
+    n_total = len(all_sv_pairs)
+    n_keep = n_total
+
+    if max_truncation_err is not None and n_total > 0:
+        total_sq = sum(x[0] ** 2 for x in all_sv_pairs)
+        if total_sq > 0:
+            trunc_sq = 0.0
+            for i in range(n_total - 1, 0, -1):
+                trunc_sq += all_sv_pairs[i][0] ** 2
+                if trunc_sq / total_sq > max_truncation_err ** 2:
+                    n_keep = i + 1
+                    break
+            else:
+                n_keep = n_total
+
+    if max_singular_values is not None:
+        n_keep = min(n_keep, max_singular_values)
+
+    n_keep = max(1, min(n_keep, n_total))
+
+    # Count per-sector keep
+    kept = all_sv_pairs[:n_keep]
+    sector_keep_count: dict[int, int] = {}
+    for _, q, _ in kept:
+        sector_keep_count[q] = sector_keep_count.get(q, 0) + 1
+
+    # Build the bond index charges: one entry per kept singular value,
+    # charge = q for the sector it belongs to.
+    # We need to order them: iterate sectors in sorted order.
+    bond_charges_list: list[int] = []
+    # Collect the final singular values in the same order
+    final_sv_list: list[float] = []
+
+    # Also build per-sector offset in the bond dimension
+    sector_bond_offset: dict[int, int] = {}
+
+    for q in sorted(sector_keep_count.keys()):
+        sector_bond_offset[q] = len(bond_charges_list)
+        n_q = sector_keep_count[q]
+        bond_charges_list.extend([q] * n_q)
+        s_q_np = np.array(sector_results[q][1])
+        final_sv_list.extend(s_q_np[:n_q].tolist())
+
+    bond_charges = np.array(bond_charges_list, dtype=np.int32)
+    s_final = jnp.array(final_sv_list)
+
+    if normalize and jnp.sum(s_final) > 0:
+        s_final = s_final / jnp.sum(s_final)
+
+    sym = tensor.indices[0].symmetry
+
+    bond_index_out = TensorIndex(sym, bond_charges, FlowDirection.OUT, label=new_bond_label)
+    bond_index_in = TensorIndex(sym, bond_charges, FlowDirection.IN, label=new_bond_label)
+
+    # Reconstruct U blocks: keys are (left_subkey..., bond_charge_q)
+    # U has indices: (left_indices..., bond_index_out)
+    U_indices = left_indices + (bond_index_out,)
+    Vh_indices = (bond_index_in,) + right_indices
+
+    U_blocks: dict[BlockKey, jax.Array] = {}
+    Vh_blocks: dict[BlockKey, jax.Array] = {}
+
+    for q in sorted(sector_keep_count.keys()):
+        U_q, _, Vh_q, left_subkeys, right_subkeys, left_row_sizes, right_col_sizes = sector_results[q]
+        n_q = sector_keep_count[q]
+
+        # Slice U_q and Vh_q to keep only n_q singular vectors
+        U_q_trunc = U_q[:, :n_q]
+        Vh_q_trunc = Vh_q[:n_q, :]
+
+        # Split U_q rows back into individual left_subkey blocks
+        row_offset = 0
+        for li, lk in enumerate(left_subkeys):
+            n_rows = left_row_sizes[li]
+            u_slice = U_q_trunc[row_offset:row_offset + n_rows, :]
+            # Reshape: (prod(left_shape_for_lk), n_q) -> (left_shape_for_lk..., n_q)
+            left_shape = tuple(
+                int(np.sum(tensor.indices[ax].charges == ch))
+                for ax, ch in zip(left_axes, lk)
+            )
+            u_block = u_slice.reshape(left_shape + (n_q,))
+            block_key = lk + (q,)
+            U_blocks[block_key] = u_block
+            row_offset += n_rows
+
+        # Split Vh_q cols back into individual right_subkey blocks
+        col_offset = 0
+        for ri, rk in enumerate(right_subkeys):
+            n_cols = right_col_sizes[ri]
+            vh_slice = Vh_q_trunc[:, col_offset:col_offset + n_cols]
+            right_shape = tuple(
+                int(np.sum(tensor.indices[ax].charges == ch))
+                for ax, ch in zip(right_axes, rk)
+            )
+            vh_block = vh_slice.reshape((n_q,) + right_shape)
+            block_key = (q,) + rk
+            Vh_blocks[block_key] = vh_block
+            col_offset += n_cols
+
+    U_tensor = SymmetricTensor(U_blocks, U_indices)
+    Vh_tensor = SymmetricTensor(Vh_blocks, Vh_indices)
+
+    return U_tensor, s_final, Vh_tensor
+
+
+def _qr_symmetric(
+    tensor: SymmetricTensor,
+    left_labels: Sequence[Label],
+    right_labels: Sequence[Label],
+    new_bond_label: Label,
+) -> tuple[SymmetricTensor, SymmetricTensor]:
+    """Block-diagonal QR decomposition for SymmetricTensor.
+
+    Each charge sector is decomposed independently; the bond index carries
+    the sector charge with multiplicity = min(left_dim, right_dim) per sector.
+    """
+    all_labels = tensor.labels()
+    label_to_axis = {lbl: i for i, lbl in enumerate(all_labels)}
+    left_axes = [label_to_axis[lbl] for lbl in left_labels]
+    right_axes = [label_to_axis[lbl] for lbl in right_labels]
+    left_indices = tuple(tensor.indices[i] for i in left_axes)
+    right_indices = tuple(tensor.indices[i] for i in right_axes)
+
+    grouped = _group_blocks_by_bond_charge(tensor, left_axes, right_axes)
+
+    # Per-sector QR results
+    sector_results: dict[int, tuple[jax.Array, jax.Array,
+                                     list[BlockKey], list[BlockKey],
+                                     list[int], list[int], int]] = {}
+
+    bond_charges_list: list[int] = []
+    sector_bond_offset: dict[int, int] = {}
+
+    for q in sorted(grouped.keys()):
+        entries = grouped[q]
+
+        left_subkeys_seen: dict[BlockKey, int] = {}
+        right_subkeys_seen: dict[BlockKey, int] = {}
+        for lk, rk, _ in entries:
+            if lk not in left_subkeys_seen:
+                left_subkeys_seen[lk] = len(left_subkeys_seen)
+            if rk not in right_subkeys_seen:
+                right_subkeys_seen[rk] = len(right_subkeys_seen)
+
+        left_subkeys = list(left_subkeys_seen.keys())
+        right_subkeys = list(right_subkeys_seen.keys())
+
+        left_row_sizes: list[int] = []
+        for lk in left_subkeys:
+            size = 1
+            for leg_pos, charge_val in zip(left_axes, lk):
+                idx = tensor.indices[leg_pos]
+                size *= int(np.sum(idx.charges == charge_val))
+            left_row_sizes.append(size)
+
+        right_col_sizes: list[int] = []
+        for rk in right_subkeys:
+            size = 1
+            for leg_pos, charge_val in zip(right_axes, rk):
+                idx = tensor.indices[leg_pos]
+                size *= int(np.sum(idx.charges == charge_val))
+            right_col_sizes.append(size)
+
+        total_rows = sum(left_row_sizes)
+        total_cols = sum(right_col_sizes)
+
+        if total_rows == 0 or total_cols == 0:
+            continue
+
+        # Assemble block matrix
+        matrix = jnp.zeros((total_rows, total_cols), dtype=tensor.dtype)
+        for lk, rk, block in entries:
+            li = left_subkeys_seen[lk]
+            ri = right_subkeys_seen[rk]
+            row_start = sum(left_row_sizes[:li])
+            col_start = sum(right_col_sizes[:ri])
+            flat_block = block.reshape(left_row_sizes[li], right_col_sizes[ri])
+            matrix = matrix.at[row_start:row_start + left_row_sizes[li],
+                               col_start:col_start + right_col_sizes[ri]].set(flat_block)
+
+        Q_q, R_q = jnp.linalg.qr(matrix)
+        bond_dim_q = Q_q.shape[1]
+
+        sector_bond_offset[q] = len(bond_charges_list)
+        bond_charges_list.extend([q] * bond_dim_q)
+        sector_results[q] = (Q_q, R_q, left_subkeys, right_subkeys,
+                             left_row_sizes, right_col_sizes, bond_dim_q)
+
+    bond_charges = np.array(bond_charges_list, dtype=np.int32)
+    sym = tensor.indices[0].symmetry
+
+    bond_index_out = TensorIndex(sym, bond_charges, FlowDirection.OUT, label=new_bond_label)
+    bond_index_in = TensorIndex(sym, bond_charges, FlowDirection.IN, label=new_bond_label)
+
+    Q_indices = left_indices + (bond_index_out,)
+    R_indices = (bond_index_in,) + right_indices
+
+    Q_blocks: dict[BlockKey, jax.Array] = {}
+    R_blocks: dict[BlockKey, jax.Array] = {}
+
+    for q, (Q_q, R_q, left_subkeys, right_subkeys,
+            left_row_sizes, right_col_sizes, bond_dim_q) in sector_results.items():
+
+        # Split Q rows back into left_subkey blocks
+        row_offset = 0
+        for li, lk in enumerate(left_subkeys):
+            n_rows = left_row_sizes[li]
+            q_slice = Q_q[row_offset:row_offset + n_rows, :]
+            left_shape = tuple(
+                int(np.sum(tensor.indices[ax].charges == ch))
+                for ax, ch in zip(left_axes, lk)
+            )
+            q_block = q_slice.reshape(left_shape + (bond_dim_q,))
+            Q_blocks[lk + (q,)] = q_block
+            row_offset += n_rows
+
+        # Split R cols back into right_subkey blocks
+        col_offset = 0
+        for ri, rk in enumerate(right_subkeys):
+            n_cols = right_col_sizes[ri]
+            r_slice = R_q[:, col_offset:col_offset + n_cols]
+            right_shape = tuple(
+                int(np.sum(tensor.indices[ax].charges == ch))
+                for ax, ch in zip(right_axes, rk)
+            )
+            r_block = r_slice.reshape((bond_dim_q,) + right_shape)
+            R_blocks[(q,) + rk] = r_block
+            col_offset += n_cols
+
+    Q_tensor = SymmetricTensor(Q_blocks, Q_indices)
+    R_tensor = SymmetricTensor(R_blocks, R_indices)
+
+    return Q_tensor, R_tensor
+
+
 # ---------- Truncated SVD ----------
 
 def truncated_svd(
@@ -437,6 +808,14 @@ def truncated_svd(
         raise ValueError(
             f"left_labels and right_labels must be disjoint, "
             f"got overlap: {left_set & right_set}"
+        )
+
+    # Dispatch to block-sparse path for SymmetricTensor
+    if isinstance(tensor, SymmetricTensor):
+        return _truncated_svd_symmetric(
+            tensor, left_labels, right_labels,
+            max_singular_values, max_truncation_err,
+            new_bond_label, normalize,
         )
 
     # Build axis ordering: left labels first, then right labels
@@ -516,21 +895,8 @@ def truncated_svd(
     U_indices = left_indices + (bond_index_out,)
     Vh_indices = (bond_index_in,) + right_indices
 
-    U_tensor: Tensor
-    Vh_tensor: Tensor
-    if isinstance(tensor, SymmetricTensor):
-        # For symmetric tensors, extract block structure from the dense result
-        # This is a simplified version; a full symmetric SVD would preserve blocks
-        try:
-            U_tensor = SymmetricTensor.from_dense(U_dense, U_indices)
-            Vh_tensor = SymmetricTensor.from_dense(Vh_dense, Vh_indices)
-        except ValueError:
-            # Fallback to dense if block extraction fails
-            U_tensor = DenseTensor(U_dense, U_indices)
-            Vh_tensor = DenseTensor(Vh_dense, Vh_indices)
-    else:
-        U_tensor = DenseTensor(U_dense, U_indices)
-        Vh_tensor = DenseTensor(Vh_dense, Vh_indices)
+    U_tensor = DenseTensor(U_dense, U_indices)
+    Vh_tensor = DenseTensor(Vh_dense, Vh_indices)
 
     return U_tensor, s, Vh_tensor
 
@@ -561,6 +927,10 @@ def qr_decompose(
     Returns:
         (Q_tensor, R_tensor) where Q is isometric (Q^dag Q = I).
     """
+    # Dispatch to block-sparse path for SymmetricTensor
+    if isinstance(tensor, SymmetricTensor):
+        return _qr_symmetric(tensor, left_labels, right_labels, new_bond_label)
+
     all_labels = tensor.labels()
     label_to_axis = {lbl: i for i, lbl in enumerate(all_labels)}
     left_axes = [label_to_axis[lbl] for lbl in left_labels]
