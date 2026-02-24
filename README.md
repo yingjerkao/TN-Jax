@@ -120,7 +120,7 @@ print(z3.fuse(np.array([1, 2], dtype=np.int32),
 
 ```bash
 # Clone and install with dev dependencies
-git clone https://github.com/yjkao/TN-Jax
+git clone https://github.com/yingjerkao/TN-Jax
 cd TN-Jax
 uv sync --all-extras --dev
 

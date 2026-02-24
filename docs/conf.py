@@ -3,7 +3,7 @@
 import warnings
 
 project = "TN-Jax"
-copyright = "2024, TN-Jax Contributors"
+copyright = "2025, TN-Jax Contributors"
 author = "TN-Jax Contributors"
 release = "0.1.0"
 

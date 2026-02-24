@@ -15,7 +15,7 @@ pip install tnjax
 
 ```bash
 # Clone the repository
-git clone https://github.com/yjkao/TN-Jax.git
+git clone https://github.com/yingjerkao/TN-Jax.git
 cd TN-Jax
 
 # Install in development mode with all extras

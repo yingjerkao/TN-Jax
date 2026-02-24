@@ -46,9 +46,9 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yjkao/TN-Jax"
-Repository = "https://github.com/yjkao/TN-Jax"
-Issues = "https://github.com/yjkao/TN-Jax/issues"
+Homepage = "https://github.com/yingjerkao/TN-Jax"
+Repository = "https://github.com/yingjerkao/TN-Jax"
+Issues = "https://github.com/yingjerkao/TN-Jax/issues"
 
 [tool.uv]
 dev-dependencies = ["tnjax[dev]"]
