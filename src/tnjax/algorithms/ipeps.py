@@ -71,6 +71,11 @@ class iPEPSConfig:
     ctm: CTMConfig = field(default_factory=CTMConfig)
     svd_trunc_err: float | None = None
     gate_order: str = "sequential"
+    # AD ground-state optimization settings
+    gs_optimizer: str = "adam"
+    gs_learning_rate: float = 1e-3
+    gs_num_steps: int = 200
+    gs_conv_tol: float = 1e-8
 
 
 class CTMEnvironment(NamedTuple):
@@ -967,3 +972,91 @@ def _build_1x1_peps(A: jax.Array, d: int, D: int) -> TensorNetwork:
     peps = TensorNetwork(name="iPEPS_1x1")
     peps.add_node((0, 0), DenseTensor(A, indices))
     return peps
+
+
+def optimize_gs_ad(
+    hamiltonian_gate: jax.Array,
+    A_init: jax.Array | None,
+    config: iPEPSConfig,
+) -> tuple[jax.Array, CTMEnvironment, float]:
+    """AD-based ground state optimization of iPEPS.
+
+    Uses automatic differentiation through the CTM fixed-point equation
+    (Lootens et al. PRR 7, 013237) to compute exact gradients of the
+    energy with respect to the site tensor A, then optimizes with optax.
+
+    Args:
+        hamiltonian_gate: 2-site Hamiltonian of shape ``(d, d, d, d)``.
+        A_init:           Initial site tensor ``(D, D, D, D, d)``, or None
+                          for random initialization.
+        config:           iPEPSConfig with AD optimization settings.
+
+    Returns:
+        ``(A_opt, env, E_gs)`` — optimized tensor, CTM environment, and
+        ground state energy per site.
+    """
+    import optax
+
+    from tnjax.algorithms.ad_utils import ctm_converge
+
+    gate = jnp.array(hamiltonian_gate)
+    d_phys = gate.shape[0]
+    D = config.max_bond_dim
+
+    # Initialize site tensor
+    if A_init is None:
+        key = jax.random.PRNGKey(0)
+        A = jax.random.normal(key, (D, D, D, D, d_phys))
+    else:
+        A = jnp.array(A_init)
+    A = A / (jnp.linalg.norm(A) + 1e-10)
+
+    # Pack CTM config as tuple for JAX tracing
+    config_tuple = (config.ctm.chi, config.ctm.max_iter,
+                    config.ctm.conv_tol, int(config.ctm.renormalize))
+
+    # Define loss: A -> energy
+    def loss_fn(A_param):
+        A_norm = A_param / (jnp.linalg.norm(A_param) + 1e-10)
+        env_tuple = ctm_converge(A_norm, config_tuple)
+        env = CTMEnvironment(*env_tuple)
+        energy = compute_energy_ctm(A_norm, env, gate, d_phys)
+        return energy
+
+    # Set up optimizer
+    if config.gs_optimizer == "adam":
+        optimizer = optax.adam(config.gs_learning_rate)
+    else:
+        optimizer = optax.adam(config.gs_learning_rate)
+
+    opt_state = optimizer.init(A)
+
+    best_energy = float("inf")
+    best_A = A
+    prev_energy = float("inf")
+
+    for step in range(config.gs_num_steps):
+        energy_val, grads = jax.value_and_grad(loss_fn)(A)
+        energy_float = float(energy_val)
+
+        if energy_float < best_energy:
+            best_energy = energy_float
+            best_A = A
+
+        # Check convergence
+        if abs(energy_float - prev_energy) < config.gs_conv_tol:
+            break
+        prev_energy = energy_float
+
+        updates, opt_state = optimizer.update(grads, opt_state, A)
+        A = optax.apply_updates(A, updates)
+        # Re-normalize
+        A = A / (jnp.linalg.norm(A) + 1e-10)
+
+    # Final CTM environment
+    A_final = best_A / (jnp.linalg.norm(best_A) + 1e-10)
+    env_tuple = ctm_converge(A_final, config_tuple)
+    env = CTMEnvironment(*env_tuple)
+    E_gs = float(compute_energy_ctm(A_final, env, gate, d_phys))
+
+    return A_final, env, E_gs

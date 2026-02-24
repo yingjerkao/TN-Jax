@@ -25,6 +25,8 @@ dependencies = [
     "opt-einsum>=3.3.0",
     "numpy>=1.26",
     "networkx>=3.0",
+    "optax>=0.2.0",
+    "scipy>=1.11",
 ]
 
 [project.optional-dependencies]
@@ -69,7 +71,7 @@ select = ["E", "F", "I", "UP"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["F401"]
+"tests/**" = ["F401", "E402"]
 
 [tool.mypy]
 python_version = "3.11"

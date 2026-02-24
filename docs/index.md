@@ -37,6 +37,7 @@ guide/algorithms/dmrg
 guide/algorithms/trg
 guide/algorithms/hotrg
 guide/algorithms/ipeps
+guide/algorithms/ad_excitations
 guide/algorithms/auto_mpo
 ```
 
