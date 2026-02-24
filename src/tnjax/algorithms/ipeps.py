@@ -172,14 +172,15 @@ def ipeps(
     # Initialize lambda matrices (identity = no environment approximation)
     D = config.max_bond_dim
     lambdas = {
-        "right": jnp.ones(D),
-        "up": jnp.ones(D),
+        "horizontal": jnp.ones(D),
+        "vertical": jnp.ones(D),
     }
 
-    # Simple update iterations
+    # Simple update iterations — alternate horizontal and vertical bonds
     for step in range(config.num_imaginary_steps):
+        bond = "horizontal" if step % 2 == 0 else "vertical"
         A_dense, lambdas = _simple_update_1x1(
-            A_dense, A_dense, lambdas, trotter_gate, config.max_bond_dim
+            A_dense, A_dense, lambdas, trotter_gate, config.max_bond_dim, bond=bond,
         )
 
     # Reconstruct PEPS tensor network with optimized tensor
@@ -200,6 +201,8 @@ def _simple_update_1x1(
     lambdas: dict[str, jax.Array],
     gate: jax.Array,
     max_bond_dim: int,
+    *,
+    bond: str = "horizontal",
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
     """Simple update step for a 1x1 unit cell PEPS.
 
@@ -213,55 +216,208 @@ def _simple_update_1x1(
         lambdas:      Dict of lambda vectors for each bond direction.
         gate:         2-site gate of shape (d, d, d, d).
         max_bond_dim: Maximum D after truncation.
+        bond:         Which bond to update: ``"horizontal"`` (A.r ↔ B.l) or
+                      ``"vertical"`` (A.d ↔ B.u).
 
     Returns:
         (A_new, lambdas_new)
     """
-    # Simplified: treat A as having shape (D, D, d) with right/up bonds
-    # Full implementation would handle all 4 virtual bonds
     d = gate.shape[0]
-    D = max_bond_dim
 
     if A.ndim == 3:
-        # Shape (D_l, D_r, d) — simplified 2-leg tensor
-        D_l, D_r, phys = A.shape
+        return _simple_update_3leg(A, B, lambdas, gate, max_bond_dim, d)
 
-        # Apply gate on right bond: A[l, r, s] * A[l', r', s'] * gate[s, s', t, t']
-        # -> theta[l, l', r'', t, t'] -> SVD -> A_new, lambda_new
-        lam_r = lambdas.get("right", jnp.ones(min(D_r, D)))
+    # --- Full 5-leg tensors: A[u, d, l, r, s] ---
+    D_u, D_d, D_l, D_r, phys = A.shape
+    lam_h = lambdas.get("horizontal", jnp.ones(D_r))
+    lam_v = lambdas.get("vertical", jnp.ones(D_d))
 
-        # Absorb lambda
-        A_abs = A * lam_r[None, :min(D_r, len(lam_r)), None]
+    if bond == "horizontal":
+        return _simple_update_horizontal(A, lam_h, lam_v, gate, max_bond_dim, lambdas)
+    else:
+        return _simple_update_vertical(A, lam_h, lam_v, gate, max_bond_dim, lambdas)
 
-        # Two-site tensor: theta[l, l', t, t'] for a homogeneous lattice
-        # theta = sum_{r, s, s'} A[l, r, s] * A_2[l', r, s'] * gate[s, s', t, t']
-        # (A_2 = A by translational invariance)
-        A2 = A
-        theta = jnp.einsum("lrs,Lrs,sstT->lLtT", A_abs, A2, gate.reshape(phys, phys, d, d))
 
-        # SVD
-        theta_mat = theta.reshape(D_l * D_l, d * d)
-        U, s, Vh = jnp.linalg.svd(theta_mat, full_matrices=False)
+def _simple_update_3leg(
+    A: jax.Array,
+    B: jax.Array,
+    lambdas: dict[str, jax.Array],
+    gate: jax.Array,
+    max_bond_dim: int,
+    d: int,
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    """Simple update for the legacy 3-leg (D_l, D_r, d) tensor path."""
+    D_l, D_r, phys = A.shape
+    lam_r = lambdas.get("horizontal", lambdas.get("right", jnp.ones(min(D_r, max_bond_dim))))
 
-        n_keep = min(max_bond_dim, len(s))
-        U = U[:, :n_keep]
-        s_new = s[:n_keep]
-        Vh = Vh[:n_keep, :]
+    A_abs = A * lam_r[None, :min(D_r, len(lam_r)), None]
+    theta = jnp.einsum("lrs,Lrs,sstT->lLtT", A_abs, A, gate.reshape(phys, phys, d, d))
 
-        # Remove lambda and normalize
-        s_norm = s_new / (jnp.max(s_new) + 1e-15)
-        lam_inv = 1.0 / (lam_r[:min(D_r, len(lam_r))] + 1e-15)
+    theta_mat = theta.reshape(D_l * D_l, d * d)
+    U, s, Vh = jnp.linalg.svd(theta_mat, full_matrices=False)
 
-        A_new_mat = U.reshape(D_l, D_l, n_keep)[:, 0, :]  # take first "left" slice
-        A_new = (A_new_mat * lam_inv[None, :min(D_l, len(lam_inv))]).reshape(D_l, n_keep, d)
+    n_keep = min(max_bond_dim, len(s))
+    U = U[:, :n_keep]
+    s_new = s[:n_keep]
 
-        lambdas_new = dict(lambdas)
-        lambdas_new["right"] = s_norm
+    s_norm = s_new / (jnp.max(s_new) + 1e-15)
+    lam_inv = 1.0 / (lam_r[:min(D_r, len(lam_r))] + 1e-15)
 
-        return A_new, lambdas_new
+    A_new_mat = U.reshape(D_l, D_l, n_keep)[:, 0, :]
+    A_new = (A_new_mat * lam_inv[None, :min(D_l, len(lam_inv))]).reshape(D_l, n_keep, d)
 
-    # For full 5-leg tensors, use a similar procedure
-    return A, lambdas
+    lambdas_new = dict(lambdas)
+    lambdas_new["horizontal"] = s_norm
+    lambdas_new.pop("right", None)
+    return A_new, lambdas_new
+
+
+def _simple_update_horizontal(
+    A: jax.Array,
+    lam_h: jax.Array,
+    lam_v: jax.Array,
+    gate: jax.Array,
+    max_bond_dim: int,
+    lambdas: dict[str, jax.Array],
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    """Simple update on the horizontal bond (A.r ↔ B.l, B=A by periodicity).
+
+    A[u, d, l, r, s]:
+      - shared bond: r  (horizontal lambda)
+      - outer bonds: u, d (vertical lambda), l (horizontal lambda)
+    """
+    D_u, D_d, D_l, D_r, d = A.shape
+    eps = 1e-15
+
+    # 1. Absorb outer lambdas onto A (all legs except shared bond r)
+    #    u ← lam_v, d ← lam_v, l ← lam_h
+    A_abs = A * lam_v[:D_u, None, None, None, None]   # u
+    A_abs = A_abs * lam_v[None, :D_d, None, None, None]  # d
+    A_abs = A_abs * lam_h[None, None, :D_l, None, None]  # l
+
+    # 2. Absorb shared-bond lambda onto A's right leg
+    A_abs = A_abs * lam_h[None, None, None, :D_r, None]  # r (shared)
+
+    # 3. B = A by periodicity, absorb outer lambdas on B (all except B.l = shared)
+    #    B[u, d, l, r, s]: outer = u(lam_v), d(lam_v), r(lam_h)
+    B_abs = A * lam_v[:D_u, None, None, None, None]
+    B_abs = B_abs * lam_v[None, :D_d, None, None, None]
+    B_abs = B_abs * lam_h[None, None, None, :D_r, None]  # r outer on B
+
+    # 4. Form two-site tensor: contract A_abs.r with B_abs.l
+    #    theta[u, d, l, U, D, R, s, t] = A_abs[u,d,l,r,s] * B_abs[U,D,r,R,t]
+    theta = jnp.einsum("udlrs,UDrRt->udlUDRst", A_abs, B_abs)
+    # shape: (D_u, D_d, D_l, D_u, D_d, D_r, d, d)
+
+    # 5. Apply Trotter gate
+    theta = jnp.einsum("udlUDRst,stST->udlUDRST", theta, gate)
+
+    # 6. SVD split: group (u,d,l,S) vs (U,D,R,T)
+    left_size = D_u * D_d * D_l * d
+    right_size = D_u * D_d * D_r * d
+    mat = theta.transpose(0, 1, 2, 6, 3, 4, 5, 7).reshape(left_size, right_size)
+
+    U_mat, sigma, Vh_mat = jnp.linalg.svd(mat, full_matrices=False)
+    keep = min(max_bond_dim, len(sigma))
+    U_mat = U_mat[:, :keep]
+    sigma = sigma[:keep]
+    Vh_mat = Vh_mat[:keep, :]
+
+    # 7. New lambda (normalized)
+    lam_new = sigma / (jnp.max(sigma) + eps)
+
+    # 8. Reconstruct A_new from U_mat: shape (D_u, D_d, D_l, d, keep)
+    #    Absorb sqrt(sigma) into both sides for symmetry
+    sqrt_sig = jnp.sqrt(sigma + eps)
+    A_left = (U_mat * sqrt_sig[None, :]).reshape(D_u, D_d, D_l, d, keep)
+    A_new = A_left.transpose(0, 1, 2, 4, 3)  # -> (D_u, D_d, D_l, keep, d)
+
+    # 9. Remove outer lambdas (divide back)
+    lam_v_inv = 1.0 / (lam_v + eps)
+    lam_h_inv = 1.0 / (lam_h + eps)
+    A_new = A_new * lam_v_inv[:D_u, None, None, None, None]
+    A_new = A_new * lam_v_inv[None, :D_d, None, None, None]
+    A_new = A_new * lam_h_inv[None, None, :D_l, None, None]
+
+    # Normalize A_new
+    A_new = A_new / (jnp.linalg.norm(A_new) + eps)
+
+    lambdas_new = dict(lambdas)
+    lambdas_new["horizontal"] = lam_new
+    return A_new, lambdas_new
+
+
+def _simple_update_vertical(
+    A: jax.Array,
+    lam_h: jax.Array,
+    lam_v: jax.Array,
+    gate: jax.Array,
+    max_bond_dim: int,
+    lambdas: dict[str, jax.Array],
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    """Simple update on the vertical bond (A.d ↔ B.u, B=A by periodicity).
+
+    A[u, d, l, r, s]:
+      - shared bond: d  (vertical lambda)
+      - outer bonds: u (vertical lambda), l, r (horizontal lambda)
+    """
+    D_u, D_d, D_l, D_r, d = A.shape
+    eps = 1e-15
+
+    # 1. Absorb outer lambdas onto A (all legs except shared bond d)
+    A_abs = A * lam_v[:D_u, None, None, None, None]      # u (outer)
+    A_abs = A_abs * lam_h[None, None, :D_l, None, None]   # l
+    A_abs = A_abs * lam_h[None, None, None, :D_r, None]   # r
+
+    # 2. Absorb shared-bond lambda onto A's down leg
+    A_abs = A_abs * lam_v[None, :D_d, None, None, None]   # d (shared)
+
+    # 3. B = A by periodicity, absorb outer lambdas on B (all except B.u = shared)
+    B_abs = A * lam_v[None, :D_d, None, None, None]       # d outer on B
+    B_abs = B_abs * lam_h[None, None, :D_l, None, None]
+    B_abs = B_abs * lam_h[None, None, None, :D_r, None]
+
+    # 4. Form two-site tensor: contract A_abs.d with B_abs.u
+    #    theta[u, l, r, D, L, R, s, t] = A_abs[u,d,l,r,s] * B_abs[d,D,L,R,t]
+    theta = jnp.einsum("udlrs,dDLRt->ulrDLRst", A_abs, B_abs)
+    # shape: (D_u, D_l, D_r, D_d, D_l, D_r, d, d)
+
+    # 5. Apply Trotter gate
+    theta = jnp.einsum("ulrDLRst,stST->ulrDLRST", theta, gate)
+
+    # 6. SVD split: group (u,l,r,S) vs (D,L,R,T)
+    left_size = D_u * D_l * D_r * d
+    right_size = D_d * D_l * D_r * d
+    mat = theta.transpose(0, 1, 2, 6, 3, 4, 5, 7).reshape(left_size, right_size)
+
+    U_mat, sigma, Vh_mat = jnp.linalg.svd(mat, full_matrices=False)
+    keep = min(max_bond_dim, len(sigma))
+    U_mat = U_mat[:, :keep]
+    sigma = sigma[:keep]
+    Vh_mat = Vh_mat[:keep, :]
+
+    # 7. New lambda (normalized)
+    lam_new = sigma / (jnp.max(sigma) + eps)
+
+    # 8. Reconstruct A_new from U_mat: shape (D_u, D_l, D_r, d, keep)
+    sqrt_sig = jnp.sqrt(sigma + eps)
+    A_left = (U_mat * sqrt_sig[None, :]).reshape(D_u, D_l, D_r, d, keep)
+    # Transpose to (D_u, keep, D_l, D_r, d) — keep goes into the "d" (down) slot
+    A_new = A_left.transpose(0, 4, 1, 2, 3)  # -> (D_u, keep, D_l, D_r, d)
+
+    # 9. Remove outer lambdas (divide back)
+    lam_v_inv = 1.0 / (lam_v + eps)
+    lam_h_inv = 1.0 / (lam_h + eps)
+    A_new = A_new * lam_v_inv[:D_u, None, None, None, None]
+    A_new = A_new * lam_h_inv[None, None, :D_l, None, None]
+    A_new = A_new * lam_h_inv[None, None, None, :D_r, None]
+
+    # Normalize A_new
+    A_new = A_new / (jnp.linalg.norm(A_new) + eps)
+
+    lambdas_new = dict(lambdas)
+    lambdas_new["vertical"] = lam_new
+    return A_new, lambdas_new
 
 
 def ctm(
@@ -339,8 +495,8 @@ def _build_double_layer(A: jax.Array) -> jax.Array:
     This traces out the physical index.
     """
     if A.ndim == 5:
-        # A[u, d, l, r, s]
-        return jnp.einsum("udlrs,UDLRs->udlrUDLR", A, jnp.conj(A))
+        # A[u, d, l, r, s] — fuse ket/bra pairs per spatial direction
+        return jnp.einsum("udlrs,UDLRs->uUdDlLrR", A, jnp.conj(A))
     elif A.ndim == 3:
         # A[l, r, s] — simplified 2D
         return jnp.einsum("lrs,LRs->lrLR", A, jnp.conj(A))
@@ -386,6 +542,94 @@ def _initialize_ctm_env(a: jax.Array, chi: int) -> CTMEnvironment:
     )
 
 
+def _absorb_edge(T: jax.Array, a: jax.Array, chi: int, axis: int) -> jax.Array:
+    """Absorb the double-layer tensor *a* into edge tensor *T* along one axis.
+
+    T has shape ``(chi, D2, chi)`` and ``a`` has shape ``(D2, D2, D2, D2)``
+    with legs ordered ``(u, d, l, r)``.
+
+    *axis* selects which leg of ``a`` is contracted with T's middle leg (index 1):
+        0 → a.u  (used by bottom-move for T3)
+        1 → a.d  (used by top-move for T1)
+        2 → a.l  (used by right-move for T2)
+        3 → a.r  (used by left-move for T4)
+
+    Returns a new edge tensor of shape ``(chi, D2_open, chi)`` where ``D2_open``
+    is the dimension of the leg of ``a`` *opposite* to the contracted one.
+    """
+    # Move the contracted axis of `a` to position 0, keep the rest
+    # a axes: (u=0, d=1, l=2, r=3)
+    perm = [axis] + [i for i in range(4) if i != axis]
+    a_t = a.transpose(perm)  # (contracted, remaining0, remaining1, remaining2)
+
+    # Contract T's middle leg (dim D2) with a's contracted axis (dim D2)
+    # T[i, x, j] * a_t[x, r0, r1, r2] -> (i, j, r0, r1, r2)
+    Ta = jnp.einsum("ixj,xabc->ijabc", T, a_t)
+    # shape: (chi, chi, D2, D2, D2)
+
+    # We need to figure out which remaining axis is the "open" bond direction
+    # (the one that stays as the middle leg of the new T) vs the two that get
+    # grouped with the chi legs for truncation.
+    # For a 1×1 cell the two "parallel" legs of `a` that align with T's chi
+    # legs should be grouped with them, and the "perpendicular" leg stays open.
+    #
+    # Convention (see environment layout):
+    #   left-move  (axis=3, a.r): open=a.l(2), parallel= a.u(0), a.d(1)
+    #   right-move (axis=2, a.l): open=a.r(3), parallel= a.u(0), a.d(1)
+    #   top-move   (axis=1, a.d): open=a.u(0), parallel= a.l(2), a.r(3)
+    #   bottom-move(axis=0, a.u): open=a.d(1), parallel= a.l(2), a.r(3)
+    #
+    # In our permuted ordering (after removing the contracted axis), the
+    # remaining axes in original numbering are:
+    remaining = [i for i in range(4) if i != axis]
+
+    # Determine which remaining axis is "open" (perpendicular to the move)
+    opposite_map = {0: 1, 1: 0, 2: 3, 3: 2}
+    open_axis_orig = opposite_map[axis]
+    open_pos = remaining.index(open_axis_orig)  # position in (r0, r1, r2)
+    par_pos = [i for i in range(3) if i != open_pos]  # two parallel positions
+
+    # Ta shape is (chi, chi, r0, r1, r2)
+    # Transpose so layout is: (chi, par0, chi, par1, open)
+    # then reshape to (chi*par0, chi*par1, open) and truncate both groups to chi
+    #
+    # Simpler: reshape to (chi*D2_par0, open, chi*D2_par1) -> truncate
+    # Build permutation of axes (i=0, j=1, a=2, b=3, c=4)
+    # We want: (i, par[0]+2, open_pos+2, j, par[1]+2)
+    target_order = [0, par_pos[0] + 2, open_pos + 2, 1, par_pos[1] + 2]
+    Ta = Ta.transpose(target_order)
+    s = Ta.shape  # (chi, D2_par0, D2_open, chi, D2_par1)
+    Ta = Ta.reshape(s[0] * s[1], s[2], s[3] * s[4])
+    # Truncate the first and last dims back to chi
+    # Reshape to matrix for SVD: (chi*D2_par0, D2_open * chi*D2_par1)
+    mat = Ta.reshape(s[0] * s[1], s[2] * s[3] * s[4])
+    U, sig, Vh = jnp.linalg.svd(mat, full_matrices=False)
+    n = min(chi, len(sig))
+    # Left isometry: (chi*D2_par0) -> chi
+    P_l = U[:, :n]  # (chi*D2_par0, n)
+    # Right isometry from Vh: (n, D2_open * chi*D2_par1)
+    P_r = Vh[:n, :]  # (n, D2_open * chi*D2_par1)
+
+    # T_new = P_l^T @ Ta_mat @ ... but simpler: just use truncated SVD result
+    T_trunc = (P_l[:, :n] * sig[:n][None, :]) @ P_r[:n, :]
+    D2_open = s[2]
+    T_new = T_trunc.reshape(n, D2_open, -1)
+    # The last dim might be > chi, truncate via another SVD
+    if T_new.shape[2] > chi:
+        mat2 = T_new.reshape(n * D2_open, T_new.shape[2])
+        U2, s2, Vh2 = jnp.linalg.svd(mat2, full_matrices=False)
+        n2 = min(chi, len(s2))
+        T_new = (U2[:, :n2] * s2[:n2][None, :]) @ Vh2[:n2, :chi]
+        T_new = T_new.reshape(n, D2_open, min(chi, T_new.shape[1]))
+
+    # Pad/trim to exact (chi, D2_open, chi)
+    T_out = jnp.zeros((chi, D2_open, chi), dtype=T.dtype)
+    n0 = min(n, chi)
+    n2 = min(T_new.shape[2], chi)
+    T_out = T_out.at[:n0, :, :n2].set(T_new[:n0, :, :n2])
+    return T_out
+
+
 def _ctm_left_move(
     env: CTMEnvironment,
     a: jax.Array,
@@ -393,30 +637,20 @@ def _ctm_left_move(
 ) -> CTMEnvironment:
     """Single CTM left absorption step.
 
-    Absorbs one column of PEPS tensors into the left environment (C1, T4, C4).
-
-    Updates C1, T4, C4 via:
-        C1_new = C1 * T1 * a_top_left
-        T4_new = T4 * a_left * T4 (schematically)
-        C4_new = C4 * T3 * a_bot_left
-    Then truncate to chi via SVD isometry.
+    Absorbs one column into the left environment: updates C1, T4, C4.
     """
     D2 = a.shape[0]
 
-    # Simplified absorption: C_new = C * T, then truncate
-    # Full implementation would include the PEPS tensor
-    # Here we do a schematic update
-
-    # C1: [chi, chi] * [chi, D2, chi] -> [chi*D2, chi] -> truncate -> [chi, chi]
+    # C1_new = C1[chi,chi] · T1[chi,D2,chi] → (chi,D2,chi) → reshape (chi*D2, chi)
     C1_new = jnp.einsum("ab,bdc->adc", env.C1, env.T1).reshape(chi * D2, chi)
     C1_new = _truncate_to_chi(C1_new, chi)
 
+    # C4_new = C4[chi,chi] · T3[chi,D2,chi]
     C4_new = jnp.einsum("ab,bdc->adc", env.C4, env.T3).reshape(chi * D2, chi)
     C4_new = _truncate_to_chi(C4_new, chi)
 
-    # T4: [chi, D2, chi] x a[D2, D2, D2, D2] -> updated T4
-    # Schematic: T4_new[chi, D2_new, chi] = T4 * a_l
-    T4_new = env.T4  # simplified: no change in this stub
+    # T4_new: absorb a along a.r (axis=3) into T4
+    T4_new = _absorb_edge(env.T4, a, chi, axis=3)
 
     return CTMEnvironment(
         C1=C1_new, C2=env.C2, C3=env.C3, C4=C4_new,
@@ -429,7 +663,7 @@ def _ctm_right_move(
     a: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """Single CTM right absorption step."""
+    """Single CTM right absorption step: updates C2, T2, C3."""
     D2 = a.shape[0]
 
     C2_new = jnp.einsum("ab,bdc->adc", env.C2, env.T1).reshape(chi * D2, chi)
@@ -438,9 +672,12 @@ def _ctm_right_move(
     C3_new = jnp.einsum("ab,bdc->adc", env.C3, env.T3).reshape(chi * D2, chi)
     C3_new = _truncate_to_chi(C3_new, chi)
 
+    # T2_new: absorb a along a.l (axis=2) into T2
+    T2_new = _absorb_edge(env.T2, a, chi, axis=2)
+
     return CTMEnvironment(
         C1=env.C1, C2=C2_new, C3=C3_new, C4=env.C4,
-        T1=env.T1, T2=env.T2, T3=env.T3, T4=env.T4,
+        T1=env.T1, T2=T2_new, T3=env.T3, T4=env.T4,
     )
 
 
@@ -449,7 +686,7 @@ def _ctm_top_move(
     a: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """Single CTM top absorption step."""
+    """Single CTM top absorption step: updates C1, T1, C2."""
     D2 = a.shape[0]
 
     C1_new = jnp.einsum("ab,bdc->adc", env.C1, env.T4).reshape(chi * D2, chi)
@@ -458,9 +695,12 @@ def _ctm_top_move(
     C2_new = jnp.einsum("ab,bdc->adc", env.C2, env.T2).reshape(chi * D2, chi)
     C2_new = _truncate_to_chi(C2_new, chi)
 
+    # T1_new: absorb a along a.d (axis=1) into T1
+    T1_new = _absorb_edge(env.T1, a, chi, axis=1)
+
     return CTMEnvironment(
         C1=C1_new, C2=C2_new, C3=env.C3, C4=env.C4,
-        T1=env.T1, T2=env.T2, T3=env.T3, T4=env.T4,
+        T1=T1_new, T2=env.T2, T3=env.T3, T4=env.T4,
     )
 
 
@@ -469,7 +709,7 @@ def _ctm_bottom_move(
     a: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """Single CTM bottom absorption step."""
+    """Single CTM bottom absorption step: updates C3, T3, C4."""
     D2 = a.shape[0]
 
     C3_new = jnp.einsum("ab,bdc->adc", env.C3, env.T2).reshape(chi * D2, chi)
@@ -478,9 +718,12 @@ def _ctm_bottom_move(
     C4_new = jnp.einsum("ab,bdc->adc", env.C4, env.T4).reshape(chi * D2, chi)
     C4_new = _truncate_to_chi(C4_new, chi)
 
+    # T3_new: absorb a along a.u (axis=0) into T3
+    T3_new = _absorb_edge(env.T3, a, chi, axis=0)
+
     return CTMEnvironment(
         C1=env.C1, C2=env.C2, C3=C3_new, C4=C4_new,
-        T1=env.T1, T2=env.T2, T3=env.T3, T4=env.T4,
+        T1=env.T1, T2=env.T2, T3=T3_new, T4=env.T4,
     )
 
 
@@ -511,79 +754,175 @@ def _renormalize_env(env: CTMEnvironment) -> CTMEnvironment:
     )
 
 
+def _build_double_layer_open(A: jax.Array) -> jax.Array:
+    """Double-layer tensor with physical indices left open.
+
+    Returns ``a_open`` with shape ``(D^2, D^2, D^2, D^2, d, d)`` where the
+    last two axes are the ket and bra physical indices.
+    """
+    if A.ndim == 5:
+        # A[u,d,l,r,s], conj(A)[U,D,L,R,t]
+        # -> a_open[uU, dD, lL, rR, s, t]
+        ao = jnp.einsum("udlrs,UDLRt->uUdDlLrRst", A, jnp.conj(A))
+        D = A.shape[0]
+        d = A.shape[4]
+        return ao.reshape(D**2, D**2, D**2, D**2, d, d)
+    raise ValueError("_build_double_layer_open requires a 5-leg tensor")
+
+
+def _rdm2x1(A: jax.Array, env: CTMEnvironment, d: int) -> jax.Array:
+    """Horizontal 2-site reduced density matrix from CTM environment.
+
+    Contracts the network:
+
+    .. code-block::
+
+        C1 — T1 — T1 — C2
+        |     |     |    |
+        T4  ao_1 — ao_2  T2
+        |     |     |    |
+        C4 — T3 — T3 — C3
+
+    Returns RDM with shape ``(d, d, d, d)`` — ``(s1, s1', s2, s2')``.
+    """
+    C1, C2, C3, C4, T1, T2, T3, T4 = env
+    a_open = _build_double_layer_open(A)  # (D2, D2, D2, D2, d, d)
+
+    # Step-by-step contraction (small intermediates):
+    # UL = C1 · T1  →  (chi, D2, chi)
+    UL = jnp.einsum("ab,buc->auc", C1, T1)
+    # UR = T1 · C2  →  (chi, D2, chi)
+    UR = jnp.einsum("cuf,fg->cug", T1, C2)
+    # LL = C4 · T3  →  (chi, D2, chi)
+    LL = jnp.einsum("gi,idj->gdj", C4, T3)
+    # LR = T3 · C3  →  (chi, D2, chi)
+    LR = jnp.einsum("jdk,mk->jdm", T3, C3)
+
+    # Left env: UL[a,u1,c] · T4[a,l1,g] · LL[g,d1,j]
+    # Contract a between UL and T4, g between T4 and LL
+    Lenv = jnp.einsum("auc,axg,gdj->ucxdj", UL, T4, LL)
+    # shape: (D2, chi, D2, D2, chi) → (u1, c, l1, d1, j)
+
+    # Right env: UR[c,u2,f] · T2[f,r2,m] · LR[j,d2,m]
+    # Contract f between UR and T2, m between T2 and LR
+    Renv = jnp.einsum("cuf,frm,jdm->curjd", UR, T2, LR)
+    # shape: (chi, D2, D2, chi, D2) → (c, u2, r2, j, d2)
+
+    # Contract Lenv with ao1[u1, d1, l1, r1, s, sp]:
+    # Match: u1=u, d1=d, l1=x  → free: c, r1, j, s, sp
+    Lenv_ao1 = jnp.einsum("ucxdj,udxrst->crjst", Lenv, a_open)
+    # shape: (chi, D2, chi, d, d) → (c, r1, j, s1, s1')
+
+    # Contract Renv with ao2[u2, d2, l2, r2, t, tp]:
+    # Match: u2=u, d2=d, r2=r  → free: c, l2, j, t, tp
+    Renv_ao2 = jnp.einsum("curjd,udlrtv->cjltv", Renv, a_open)
+    # shape: (chi, chi, D2, d, d) → (c, j, l2, s2, s2')
+
+    # Final: contract Lenv_ao1 with Renv_ao2
+    # Match: c=c, j=j, r1=l2  → free: s1, s1', s2, s2'
+    rdm = jnp.einsum("crjst,cjruv->stuv", Lenv_ao1, Renv_ao2)
+
+    # Symmetrize and normalize
+    rdm_mat = rdm.reshape(d * d, d * d)
+    rdm_mat = 0.5 * (rdm_mat + rdm_mat.conj().T)
+    rdm_mat = rdm_mat / (jnp.trace(rdm_mat) + 1e-15)
+    return rdm_mat.reshape(d, d, d, d)
+
+
+def _rdm1x2(A: jax.Array, env: CTMEnvironment, d: int) -> jax.Array:
+    """Vertical 2-site reduced density matrix from CTM environment.
+
+    Contracts the network:
+
+    .. code-block::
+
+        C1  — T1  — C2
+        |      |      |
+        T4 — ao_1 — T2
+        |      |      |
+        T4 — ao_2 — T2
+        |      |      |
+        C4  — T3  — C3
+
+    Returns RDM with shape ``(d, d, d, d)`` — ``(s1, s1', s2, s2')``.
+    """
+    C1, C2, C3, C4, T1, T2, T3, T4 = env
+    a_open = _build_double_layer_open(A)
+
+    # Top row: C1·T1·C2 → (chi, D2, chi)  indices: (a, u, e)
+    top_row = jnp.einsum("ab,buc,ce->aue", C1, T1, C2)
+
+    # Contract top_row with T4 (site-1 left) and T2 (site-1 right):
+    # top_row[a, u1, e]  T4[a, l1, f]  T2[e, r1, g]
+    # Contract a, e → env_row1[u1, l1, f, r1, g]
+    env_row1 = jnp.einsum("aue,alf,erg->ulfrg", top_row, T4, T2)
+    # (D2, D2, chi, D2, chi) → (u1, l1, f, r1, g)
+
+    # Contract with ao1[u1, d1, l1, r1, s, sp]:  match u1, l1, r1
+    site1 = jnp.einsum("ulfrg,udlrst->dfgst", env_row1, a_open)
+    # (D2, chi, chi, d, d) → (d1, f, g, s1, s1')
+
+    # Step A: contract T4[f,l2,h] with ao2[d1, d2, l2, r2, t, tp]  match l2
+    # Use unique index letters: a_open → (p, q, m, n, w, x)
+    #   p=d1_ao2=u, q=d2, m=l2, n=r2, w=s2, x=s2'
+    T4_ao2 = jnp.einsum("fmh,pqmnwx->fhpqnwx", T4, a_open)
+    # (chi, chi, D2, D2, D2, d, d) → (f, h, p=d1, q=d2, n=r2, w, x)
+
+    # Step B: contract site1[d1, f, g, s, t] with T4_ao2[f, h, d1, d2, r2, w, x]
+    # Match: d1 and f  (use a=d1, b=f)
+    # site1:  a(D2) b(chi) c(chi) s(d) t(d)
+    # T4_ao2: b(chi) h(chi) a(D2) q(D2) n(D2) w(d) x(d)
+    site12 = jnp.einsum("abcst,bhaqnwx->chqnstwx", site1, T4_ao2)
+    # (chi, chi, D2, D2, d, d, d, d) → (c=g, h, q=d2, n=r2, s1, s1', s2, s2')
+
+    # Contract T2[g, r2, i]: match g=c, r2=n
+    site12_r = jnp.einsum("chqnstwx,cni->hqistwx", site12, T2)
+    # (chi, D2, chi, d, d, d, d) → (h, q=d2, i, s1, s1', s2, s2')
+
+    # Bottom row: C4·T3·C3 → (chi, D2, chi)  indices: (h, d2, i)
+    bot_row = jnp.einsum("hj,jqk,ik->hqi", C4, T3, C3)
+
+    # Final: contract site12_r with bot_row  match h, q=d2, i
+    rdm = jnp.einsum("hqistwx,hqi->stwx", site12_r, bot_row)
+
+    # Symmetrize and normalize
+    rdm_mat = rdm.reshape(d * d, d * d)
+    rdm_mat = 0.5 * (rdm_mat + rdm_mat.conj().T)
+    rdm_mat = rdm_mat / (jnp.trace(rdm_mat) + 1e-15)
+    return rdm_mat.reshape(d, d, d, d)
+
+
 def compute_energy_ctm(
     A: jax.Array,
     env: CTMEnvironment,
     hamiltonian_gate: jax.Array,
     d: int,
 ) -> jax.Array:
-    """Compute energy per site using CTM environment tensors.
+    """Compute energy per site using CTM environment and 2-site RDMs.
 
-    Contracts the PEPS (A), its conjugate, the Hamiltonian operator, and
-    the CTM environment around a single horizontal bond.
-
-    Energy = <psi|H|psi> / <psi|psi>
+    Constructs horizontal and vertical two-site reduced density matrices
+    from the CTM environment and contracts each with the Hamiltonian to
+    obtain the energy per site.
 
     Args:
-        A:                 PEPS site tensor.
-        env:               CTMEnvironment from CTM algorithm.
-        hamiltonian_gate:  Hamiltonian on a 2-site bond, shape (d,d,d,d).
+        A:                 PEPS site tensor of shape ``(D, D, D, D, d)``.
+        env:               Converged CTMEnvironment.
+        hamiltonian_gate:  2-site Hamiltonian, shape ``(d, d, d, d)``.
         d:                 Physical dimension.
 
     Returns:
-        Scalar JAX array: energy per site (negative for ground state).
+        Scalar energy per site.
     """
-    # Build the double-layer tensor
-    a = _build_double_layer(A)
+    if A.ndim != 5:
+        # Fallback for legacy 3-leg tensors
+        return jnp.array(-0.25, dtype=A.dtype)
 
-    # Compute norm: contract environment + PEPS + PEPS* without Hamiltonian
-    # This is a scalar contraction using CTM environment tensors
-    # Simplified: trace of PEPS * PEPS* * environment
-    a_dense = a
-    if a_dense.ndim == 8:
-        D = A.shape[0] if A.ndim >= 1 else 1
-        a_dense = a_dense.reshape(D**2, D**2, D**2, D**2)
-
-    # Build norm by contracting the 9-tensor network (4 corners + 4 edges + 1 site)
-    # Simplified contraction using einsum on environment
-    C1, C2, C3, C4, T1, T2, T3, T4 = env
-
-    # norm ≈ Tr[C1 T1 C2 T2 C3 T3 C4 T4 * a]
-    # Schematic norm computation using the CTM environment
-    # Horizontal contraction: top row C1-T1-C2, bottom row C4-T3-C3
-    norm_top = jnp.einsum("ab,bdc,ce->ade", C1, T1, C2)  # (chi, D2, chi)
-    norm_bot = jnp.einsum("ab,bdc,ce->ade", C4, T3, C3)  # (chi, D2, chi)
-
-    # Contract top, bottom, and left/right edges with double-layer tensor
-    # Simplified: contract norm_top * a_dense * norm_bot along shared bonds
-    D2_a = a_dense.shape[0]
-    chi_env = norm_top.shape[0]
-
-    # Simple environment trace: contract corners and edges around site
-    # norm ~ sum_{i,j} norm_top[i, :, j] * norm_bot[i, :, j]
-    min_chi = min(chi_env, D2_a)
-    norm = jnp.einsum("ijk,ijk->", norm_top[:min_chi, :D2_a, :min_chi],
-                                   norm_bot[:min_chi, :D2_a, :min_chi])
-    norm = norm + 1e-15  # prevent division by zero
-
-    # Energy: <H> = Tr[env * A * H * A*] / Tr[env * A * A*]
-    # Insert gate on physical index: A_H[u,d,l,r,t] = sum_s A[u,d,l,r,s] * H[s,t]
-    # For simplicity with 5-leg A: contract gate with single site
-    if A.ndim == 5:
-        H2 = hamiltonian_gate.reshape(d, d, d, d)
-        # Two-site energy: contract A-A bond with gate
-        # E_bond = sum A[...,s] A[...,s'] H[s,s',t,t'] A*[...,t] A*[...,t']
-        # For uniform system: E ~ Tr[norm * A * A_H]
-        A_H = jnp.einsum("udlrs,stTU->udlrTU", A, H2)
-        # Contract with itself: energy_density = sum_s A[s] * H[s,t] * A*[t]
-        energy_density = jnp.einsum("udlrst,udlrst->", A_H.reshape(*A.shape[:-1], d, d),
-                                     jnp.conj(A)[..., jnp.newaxis, :].repeat(d, axis=-2)
-                                     ) if False else jnp.array(-0.25, dtype=A.dtype)
-    else:
-        energy_density = jnp.array(-0.25, dtype=A.dtype)
-
-    energy = energy_density
-    return energy
+    rdm_h = _rdm2x1(A, env, d)
+    rdm_v = _rdm1x2(A, env, d)
+    H = hamiltonian_gate.reshape(d, d, d, d)
+    E_h = jnp.einsum("ijkl,ijkl->", rdm_h, H)
+    E_v = jnp.einsum("ijkl,ijkl->", rdm_v, H)
+    return (E_h + E_v).real
 
 
 def _build_1x1_peps(A: jax.Array, d: int, D: int) -> TensorNetwork:
