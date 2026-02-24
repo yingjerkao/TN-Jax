@@ -253,6 +253,18 @@ class DenseTensor(Tensor):
         return jnp.linalg.norm(self._data.ravel())
 
     def relabel(self, old: Label, new: Label) -> DenseTensor:
+        """Return a copy with one leg label renamed.
+
+        Args:
+            old: Current label to replace.
+            new: New label value.
+
+        Returns:
+            New DenseTensor with the specified label changed.
+
+        Raises:
+            KeyError: If *old* is not found among the tensor's labels.
+        """
         found = False
         new_indices = []
         for idx in self._indices:
@@ -266,6 +278,15 @@ class DenseTensor(Tensor):
         return DenseTensor(self._data, tuple(new_indices))
 
     def relabels(self, mapping: dict[Label, Label]) -> DenseTensor:
+        """Return a copy with multiple leg labels renamed at once.
+
+        Args:
+            mapping: ``{old_label: new_label}`` pairs.  Labels not present
+                in the mapping are left unchanged.
+
+        Returns:
+            New DenseTensor with the specified labels changed.
+        """
         new_indices = tuple(
             idx.relabel(mapping[idx.label]) if idx.label in mapping else idx
             for idx in self._indices
@@ -286,14 +307,16 @@ class SymmetricTensor(Tensor):
     """Block-sparse tensor storing only symmetry-allowed charge sectors.
 
     Storage model:
-        _blocks: dict[BlockKey, jax.Array]
-            Key:   tuple of one representative charge per leg.
-            Value: JAX array of shape (n_states_leg0, ..., n_states_legN)
-                   for that charge sector.
-        _indices: tuple[TensorIndex, ...]
-            Full index metadata per leg.
 
-    Conservation law enforced on all stored blocks:
+    - ``_blocks``: ``dict[BlockKey, jax.Array]`` --
+      Key is a tuple of one representative charge per leg.
+      Value is a JAX array of shape ``(n_states_leg0, ..., n_states_legN)``
+      for that charge sector.
+    - ``_indices``: ``tuple[TensorIndex, ...]`` --
+      Full index metadata per leg.
+
+    Conservation law enforced on all stored blocks::
+
         sum_i(flow_i * charge_i) == symmetry.identity()
 
     Pytree structure:
@@ -572,6 +595,18 @@ class SymmetricTensor(Tensor):
         return {k: v.shape for k, v in self._blocks.items()}
 
     def relabel(self, old: Label, new: Label) -> SymmetricTensor:
+        """Return a copy with one leg label renamed.
+
+        Args:
+            old: Current label to replace.
+            new: New label value.
+
+        Returns:
+            New SymmetricTensor sharing the same block data.
+
+        Raises:
+            KeyError: If *old* is not found among the tensor's labels.
+        """
         found = False
         new_indices = []
         for idx in self._indices:
@@ -590,6 +625,15 @@ class SymmetricTensor(Tensor):
         return obj
 
     def relabels(self, mapping: dict[Label, Label]) -> SymmetricTensor:
+        """Return a copy with multiple leg labels renamed at once.
+
+        Args:
+            mapping: ``{old_label: new_label}`` pairs.  Labels not present
+                in the mapping are left unchanged.
+
+        Returns:
+            New SymmetricTensor sharing the same block data.
+        """
         new_indices = tuple(
             idx.relabel(mapping[idx.label]) if idx.label in mapping else idx
             for idx in self._indices

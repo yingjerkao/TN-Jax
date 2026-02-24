@@ -28,6 +28,10 @@ uv run ruff check src/ tests/
 
 # Type check
 uv run mypy src/
+
+# Build documentation
+uv sync --extra docs
+cd docs && uv run make html
 ```
 
 ## Architecture

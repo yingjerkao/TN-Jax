@@ -51,7 +51,7 @@ def spin_half_ops() -> dict[str, np.ndarray]:
 def spin_one_ops() -> dict[str, np.ndarray]:
     """Standard spin-1 single-site operators (d=3).
 
-    Basis ordering: |m=+1⟩, |m=0⟩, |m=-1⟩ → indices 0, 1, 2.
+    Basis ordering: ``|m=+1>``, ``|m=0>``, ``|m=-1>`` mapping to indices 0, 1, 2.
     Returns a dict with keys "Sz", "Sp", "Sm", "Id".
     """
     sq2 = np.sqrt(2.0)

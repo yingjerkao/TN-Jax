@@ -134,7 +134,17 @@ class TensorNetwork:
         self._invalidate_cache()
 
     def get_tensor(self, node_id: NodeId) -> Tensor:
-        """Return the tensor stored at a node."""
+        """Return the tensor stored at a node.
+
+        Args:
+            node_id: Identifier of the node to look up.
+
+        Returns:
+            The Tensor (DenseTensor or SymmetricTensor) at that node.
+
+        Raises:
+            KeyError: If *node_id* is not in the network.
+        """
         if node_id not in self._tensors:
             raise KeyError(f"Node {node_id!r} not found")
         return self._tensors[node_id]
@@ -327,13 +337,10 @@ class TensorNetwork:
     ) -> Tensor:
         """Contract a subset of nodes (or all nodes if nodes is None).
 
-        Internally:
-        1. Check cache for this frozenset of node IDs.
-        2. Build an einsum subscript string from the graph edge connectivity.
-           - Legs connecting two nodes within the subset are contracted.
-           - Legs connecting to a node outside the subset are kept free.
-        3. Call contract_with_subscripts() which uses opt_einsum internally.
-        4. Store result in cache and return.
+        Internally the method checks the cache, builds an einsum subscript
+        string from the graph edge connectivity (contracting shared legs,
+        keeping free legs), calls ``contract_with_subscripts()`` via
+        opt_einsum, and caches the result.
 
         The output tensor's leg labels are the free labels in output_labels
         order (or natural order if not specified).

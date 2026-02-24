@@ -216,7 +216,7 @@ class BaseNonAbelianSymmetry(BaseSymmetry):
         """Return list of irrep labels appearing in tensor product j1 x j2.
 
         For SU(2) with spin quantum numbers j1, j2, this returns
-        [|j1 - j2|, ..., j1 + j2] (triangular rule).
+        ``[abs(j1 - j2), ..., j1 + j2]`` (triangular rule).
 
         Args:
             j1: First irrep label.
