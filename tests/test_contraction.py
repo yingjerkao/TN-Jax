@@ -394,3 +394,217 @@ class TestQRDecompose:
                              new_bond_label="qr_bond")
         assert "qr_bond" in Q.labels()
         assert "qr_bond" in R.labels()
+
+
+# ------------------------------------------------------------------ #
+# Symmetric (block-sparse) Truncated SVD                               #
+# ------------------------------------------------------------------ #
+
+def _make_symmetric_2leg(u1, rng, left_charges, right_charges, left_label, right_label):
+    """Helper: build a 2-leg U(1)-symmetric tensor with given charges."""
+    indices = (
+        TensorIndex(u1, left_charges, FlowDirection.IN, label=left_label),
+        TensorIndex(u1, u1.dual(left_charges), FlowDirection.OUT, label=right_label),
+    )
+    return SymmetricTensor.random_normal(indices, rng)
+
+
+def _make_symmetric_3leg(u1, rng):
+    """Helper: build a 3-leg U(1)-symmetric tensor for multi-leg SVD tests."""
+    phys_c = np.array([-1, 0, 1], dtype=np.int32)
+    virt_c = np.array([-1, 0, 1], dtype=np.int32)
+    indices = (
+        TensorIndex(u1, phys_c, FlowDirection.IN, label="phys"),
+        TensorIndex(u1, virt_c, FlowDirection.IN, label="left"),
+        TensorIndex(u1, u1.dual(virt_c), FlowDirection.OUT, label="right"),
+    )
+    return SymmetricTensor.random_normal(indices, rng)
+
+
+class TestTruncatedSVDSymmetric:
+    def test_reconstruction(self, u1, rng):
+        """U @ diag(s) @ Vh should reconstruct a SymmetricTensor."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+        original_dense = t.todense()
+
+        U, s, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                  new_bond_label="bond")
+
+        recon = U.todense() * s[None, :] @ Vh.todense()
+        np.testing.assert_allclose(recon, original_dense, rtol=1e-4, atol=1e-6)
+
+    def test_returns_symmetric(self, u1, rng):
+        """U and Vh should be SymmetricTensor instances."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+
+        U, s, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                  new_bond_label="bond")
+
+        assert isinstance(U, SymmetricTensor)
+        assert isinstance(Vh, SymmetricTensor)
+
+    def test_bond_charges_nontrivial(self, u1, rng):
+        """Bond index should carry non-trivial charges (not all zeros)."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+
+        U, s, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                  new_bond_label="bond")
+
+        # Find bond index on U (last index)
+        bond_idx = U.indices[-1]
+        assert bond_idx.label == "bond"
+        # With charges [-1, 0, 1] there should be multiple distinct charge values
+        unique_bond_charges = set(bond_idx.charges.tolist())
+        assert len(unique_bond_charges) > 1, (
+            f"Expected non-trivial bond charges, got {unique_bond_charges}"
+        )
+
+    def test_matches_dense(self, u1, rng):
+        """Singular values from block-sparse SVD should match dense SVD."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+
+        _, s_sym, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                     new_bond_label="bond")
+
+        # Dense SVD of the same tensor
+        dense = t.todense()
+        _, s_dense, _ = jnp.linalg.svd(dense, full_matrices=False)
+
+        # Sort both for comparison (block-sparse orders by sector, not globally)
+        s_sym_sorted = np.sort(np.array(s_sym))[::-1]
+        s_dense_sorted = np.sort(np.array(s_dense))[::-1]
+
+        np.testing.assert_allclose(s_sym_sorted, s_dense_sorted, rtol=1e-4, atol=1e-6)
+
+    def test_truncation(self, u1, rng):
+        """max_singular_values should limit total bond dimension across sectors."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+
+        max_chi = 2
+        U, s, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                  new_bond_label="bond", max_singular_values=max_chi)
+
+        assert len(s) <= max_chi
+        # Bond dimension on U and Vh should match
+        assert U.indices[-1].dim == len(s)
+        assert Vh.indices[0].dim == len(s)
+
+    def test_3leg_reconstruction(self, u1, rng):
+        """SVD of a 3-leg tensor: contract(U, diag(s), Vh) ~ original."""
+        t = _make_symmetric_3leg(u1, rng)
+        original_dense = t.todense()
+
+        U, s, Vh = truncated_svd(
+            t, left_labels=["phys", "left"], right_labels=["right"],
+            new_bond_label="bond",
+        )
+
+        assert isinstance(U, SymmetricTensor)
+        assert isinstance(Vh, SymmetricTensor)
+
+        # Reconstruct via dense for simplicity
+        U_d = U.todense()
+        Vh_d = Vh.todense()
+        # U: (phys, left, bond), Vh: (bond, right)
+        # U * s along bond axis, then contract bond
+        Us = U_d * s[None, None, :]
+        recon = jnp.einsum("plb,br->plr", Us, Vh_d)
+        np.testing.assert_allclose(recon, original_dense, rtol=1e-4, atol=1e-6)
+
+    def test_conservation_law_preserved(self, u1, rng):
+        """All blocks in U and Vh should satisfy the conservation law."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+
+        U, _, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                  new_bond_label="bond")
+
+        for tensor_out in (U, Vh):
+            for key in tensor_out.blocks:
+                net = sum(
+                    int(idx.flow) * int(q)
+                    for idx, q in zip(tensor_out.indices, key)
+                )
+                assert net == u1.identity(), (
+                    f"Block {key} violates conservation: net={net}"
+                )
+
+
+# ------------------------------------------------------------------ #
+# Symmetric (block-sparse) QR                                          #
+# ------------------------------------------------------------------ #
+
+class TestQRSymmetric:
+    def test_reconstruction(self, u1, rng):
+        """contract(Q, R) should reconstruct the original SymmetricTensor."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+        original_dense = t.todense()
+
+        Q, R = qr_decompose(t, left_labels=["row"], right_labels=["col"],
+                              new_bond_label="bond")
+
+        recon = Q.todense() @ R.todense()
+        np.testing.assert_allclose(recon, original_dense, rtol=1e-4, atol=1e-6)
+
+    def test_q_isometric(self, u1, rng):
+        """Q^dag Q should be identity (block-wise)."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+
+        Q, _ = qr_decompose(t, left_labels=["row"], right_labels=["col"],
+                              new_bond_label="bond")
+
+        Q_dense = Q.todense()
+        QtQ = Q_dense.T.conj() @ Q_dense
+        np.testing.assert_allclose(QtQ, np.eye(QtQ.shape[0]), atol=1e-5)
+
+    def test_returns_symmetric(self, u1, rng):
+        """Q and R should be SymmetricTensor instances."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+
+        Q, R = qr_decompose(t, left_labels=["row"], right_labels=["col"],
+                              new_bond_label="bond")
+
+        assert isinstance(Q, SymmetricTensor)
+        assert isinstance(R, SymmetricTensor)
+
+    def test_3leg_reconstruction(self, u1, rng):
+        """QR of a 3-leg tensor: contract(Q, R) ~ original."""
+        t = _make_symmetric_3leg(u1, rng)
+        original_dense = t.todense()
+
+        Q, R = qr_decompose(
+            t, left_labels=["phys", "left"], right_labels=["right"],
+            new_bond_label="bond",
+        )
+
+        assert isinstance(Q, SymmetricTensor)
+        assert isinstance(R, SymmetricTensor)
+
+        recon = jnp.einsum("plb,br->plr", Q.todense(), R.todense())
+        np.testing.assert_allclose(recon, original_dense, rtol=1e-4, atol=1e-6)
+
+    def test_conservation_law_preserved(self, u1, rng):
+        """All blocks in Q and R should satisfy the conservation law."""
+        charges = np.array([-1, 0, 1], dtype=np.int32)
+        t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
+
+        Q, R = qr_decompose(t, left_labels=["row"], right_labels=["col"],
+                              new_bond_label="bond")
+
+        for tensor_out in (Q, R):
+            for key in tensor_out.blocks:
+                net = sum(
+                    int(idx.flow) * int(q)
+                    for idx, q in zip(tensor_out.indices, key)
+                )
+                assert net == u1.identity(), (
+                    f"Block {key} violates conservation: net={net}"
+                )
