@@ -434,8 +434,8 @@ def idmrg(
     A_R_sv = (jnp.diag(s_vals) @ Vt).reshape(n_keep, d, chi_r)
     A_R_tensor = _wrap_mps(A_R_sv, ("v_c", "p_r", "v_r"))
 
-    # Report energy as average of last few steps to smooth oscillation
-    n_avg = min(10, len(energies_per_step))
+    # Report energy as average of last half of steps to smooth oscillation
+    n_avg = max(len(energies_per_step) // 2, 1)
     e_per_site_avg = sum(energies_per_step[-n_avg:]) / n_avg
 
     return iDMRGResult(
