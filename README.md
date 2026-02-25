@@ -10,7 +10,7 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 - **Network class** — graph-based tensor network container with contraction caching
 - **Algorithms** — DMRG, iDMRG, TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
 - **AutoMPO** — build Hamiltonian MPOs from symbolic operator descriptions (custom couplings, NNN, arbitrary spin); supports `symmetric=True` for U(1) block-sparse MPOs
-- **AD-based iPEPS optimization** — gradient optimization via implicit differentiation through CTM fixed point (Lootens et al. PRR 7, 013237)
+- **AD-based iPEPS optimization** — gradient optimization via implicit differentiation through CTM fixed point (Francuz et al. PRR 7, 013237)
 - **Quasiparticle excitations** — iPEPS excitation spectra at arbitrary Brillouin-zone momenta (Ponsioen et al. 2022)
 - **Block-sparse SVD and QR** — native symmetry-aware decompositions for `SymmetricTensor`
 - **Extensible symmetry system** — non-Abelian symmetry interface for future SU(2) support
@@ -160,7 +160,7 @@ gate = jnp.einsum("ij,kl->ikjl", Sz, Sz) \
      + 0.5 * (jnp.einsum("ij,kl->ikjl", Sp, Sm)
              + jnp.einsum("ij,kl->ikjl", Sm, Sp))
 
-# AD ground-state optimization (Lootens et al. PRR 7, 013237)
+# AD ground-state optimization (Francuz et al. PRR 7, 013237)
 config = iPEPSConfig(
     max_bond_dim=2,
     ctm=CTMConfig(chi=16, max_iter=50),
@@ -222,7 +222,8 @@ The generated HTML is in `docs/_build/html/`.
 
 ## References
 
-- T. Lootens, B. Vanhecke, F. Verstraete, *PRR* **7**, 013237 (2025) — AD-based iPEPS ground-state optimization
+- H.-J. Liao, J.-G. Liu, L. Wang, T. Xiang, *Phys. Rev. X* **9**, 031041 (2019) — AD-based iPEPS ground-state optimization
+- A. Francuz, N. Schuch, B. Vanhecke, *PRR* **7**, 013237 (2025) — Stable AD through CTM (SVD regularization, truncation correction, implicit differentiation)
 - L. Ponsioen, F. F. Assaad, P. Corboz, *SciPost Phys.* **12**, 006 (2022) — Quasiparticle excitations for iPEPS
 
 ## License

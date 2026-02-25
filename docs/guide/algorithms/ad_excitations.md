@@ -4,7 +4,7 @@ TN-Jax implements the quasiparticle excitation method from
 [Ponsioen, Assaad & Corboz, SciPost Phys. 12, 006 (2022)](https://scipost.org/10.21468/SciPostPhys.12.1.006),
 using JAX automatic differentiation to construct the effective Hamiltonian
 and norm matrices. The stable AD infrastructure follows
-[Lootens et al., Phys. Rev. Research 7, 013237 (2025)](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.7.013237).
+[Francuz et al., Phys. Rev. Research 7, 013237 (2025)](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.7.013237).
 
 ## Stable AD Infrastructure
 
@@ -30,7 +30,7 @@ This smoothly approaches $1/(s_i^2 - s_j^2)$ when singular values are
 well-separated but stays finite when they are degenerate. The diagonal is
 zeroed (gauge freedom).
 
-**Truncation correction** (Lootens et al., the dominant error source) adds
+**Truncation correction** (Francuz et al., the dominant error source) adds
 two terms to the backward pass:
 
 $$
@@ -181,5 +181,5 @@ Each RDM variant specifies which tensor appears in the ket and bra layers:
 
 - Ponsioen, Assaad & Corboz, *SciPost Phys.* **12**, 006 (2022) --
   AD excitations method
-- Lootens et al., *Phys. Rev. Research* **7**, 013237 (2025) --
+- Francuz et al., *Phys. Rev. Research* **7**, 013237 (2025) --
   Stable AD of CTM (custom SVD VJP, implicit differentiation, gauge fixing)
