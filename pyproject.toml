@@ -52,8 +52,8 @@ Homepage = "https://github.com/yingjerkao/TN-Jax"
 Repository = "https://github.com/yingjerkao/TN-Jax"
 Issues = "https://github.com/yingjerkao/TN-Jax/issues"
 
-[tool.uv]
-dev-dependencies = ["tnjax[dev]"]
+[dependency-groups]
+dev = ["tnjax[dev]"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tnjax"]
