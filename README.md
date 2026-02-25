@@ -8,6 +8,7 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 - **Label-based contraction** — legs are identified by string/integer labels; shared labels are automatically contracted (Cytnx-style)
 - **opt_einsum integration** — optimal contraction path finding for multi-tensor contractions
 - **Network class** — graph-based tensor network container with contraction caching
+- **`.net` file support** — cytnx-style declarative network topology; parse once, load tensors, contract repeatedly (template pattern)
 - **Algorithms** — DMRG, iDMRG, TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
 - **AutoMPO** — build Hamiltonian MPOs from symbolic operator descriptions (custom couplings, NNN, arbitrary spin); supports `symmetric=True` for U(1) block-sparse MPOs
 - **AD-based iPEPS optimization** — gradient optimization via implicit differentiation through CTM fixed point (Francuz et al. PRR 7, 013237)
@@ -69,6 +70,30 @@ tn.add_node("A", A)
 tn.add_node("B", B)
 tn.connect_by_shared_label("A", "B")
 result = tn.contract()
+```
+
+## Network Blueprint (`.net` file) Example
+
+```python
+from tnjax import NetworkBlueprint
+
+# Define network topology as a string (or read from a .net file)
+bp = NetworkBlueprint("""
+L: a, b, c
+M: a, p, q, d
+A: b, p, s, e
+M2: e, q, t, f
+R: d, f, g
+TOUT: c, s, t, g
+""")
+
+# Load tensors (can be DenseTensor or SymmetricTensor)
+bp.put_tensors({"L": L, "M": M, "A": A, "M2": M2, "R": R})
+result = bp.launch()  # contracts the full network
+
+# Reuse with different tensors (e.g. in a DMRG sweep)
+bp.put_tensor("A", new_A)
+result2 = bp.launch()
 ```
 
 ## DMRG Example

@@ -84,6 +84,7 @@ from tnjax.core.symmetry import (
     ZnSymmetry,
 )
 from tnjax.core.tensor import BlockKey, DenseTensor, SymmetricTensor, Tensor
+from tnjax.network.netfile import NetworkBlueprint, from_netfile
 from tnjax.network.network import TensorNetwork, build_mps, build_peps
 
 __version__ = "0.1.0"
@@ -151,4 +152,6 @@ __all__ = [
     "TensorNetwork",
     "build_mps",
     "build_peps",
+    "NetworkBlueprint",
+    "from_netfile",
 ]
