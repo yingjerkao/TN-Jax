@@ -30,6 +30,27 @@ from tnjax.core.index import Label, TensorIndex
 BlockKey = tuple[int, ...]
 
 
+def _koszul_sign(parities: list[int] | tuple[int, ...], perm: tuple[int, ...]) -> int:
+    """Compute the Koszul sign for a permutation of graded (fermionic) objects.
+
+    Counts inversions where both elements have odd parity. Each such
+    inversion contributes a factor of -1.
+
+    Args:
+        parities: Parity (0 or 1) of each element in the *original* ordering.
+        perm: The permutation (indices into the original ordering).
+
+    Returns:
+        +1 or -1.
+    """
+    sign = 1
+    for i in range(len(perm)):
+        for j in range(i + 1, len(perm)):
+            if perm[i] > perm[j] and parities[perm[i]] and parities[perm[j]]:
+                sign = -sign
+    return sign
+
+
 def _compute_valid_blocks(
     indices: tuple[TensorIndex, ...],
 ) -> list[BlockKey]:
@@ -564,8 +585,41 @@ class SymmetricTensor(Tensor):
         obj._blocks = new_blocks
         return obj
 
+    def dagger(self) -> SymmetricTensor:
+        """Conjugate transpose with fermionic twist phases.
+
+        For each block, applies complex conjugation, reverses all leg flows
+        (via dual), and multiplies by the product of twist phases for all
+        charges in the block key. For bosonic symmetries this is equivalent
+        to ``conj()`` with dualled indices.
+
+        Returns:
+            New SymmetricTensor with conjugated data, dual indices, and
+            twist phase corrections.
+        """
+        sym = self._indices[0].symmetry if self._indices else None
+        new_indices = tuple(idx.dual() for idx in self._indices)
+        new_blocks: dict[BlockKey, jax.Array] = {}
+        for key, block in self._blocks.items():
+            new_key = tuple(int(sym.dual(np.array([q]))[0]) for q in key) if sym else key
+            val = jnp.conj(block)
+            if sym is not None and sym.is_fermionic:
+                twist = 1.0
+                for q in key:
+                    twist *= sym.twist_phase(q)
+                if twist != 1.0:
+                    val = val * twist
+            new_blocks[new_key] = val
+        obj = object.__new__(SymmetricTensor)
+        obj._indices = new_indices
+        obj._blocks = new_blocks
+        return obj
+
     def transpose(self, axes: tuple[int, ...]) -> SymmetricTensor:
         """Permute tensor legs.
+
+        For fermionic symmetries, each block acquires a Koszul sign
+        determined by the charges' parities and the permutation.
 
         Args:
             axes: New ordering of leg indices.
@@ -574,10 +628,19 @@ class SymmetricTensor(Tensor):
             New SymmetricTensor with permuted blocks and reordered indices.
         """
         new_indices = tuple(self._indices[i] for i in axes)
+        sym = self._indices[0].symmetry if self._indices else None
+        is_ferm = sym is not None and sym.is_fermionic
+
         new_blocks: dict[BlockKey, jax.Array] = {}
         for key, block in self._blocks.items():
             new_key = tuple(key[i] for i in axes)
-            new_blocks[new_key] = jnp.transpose(block, axes)
+            transposed = jnp.transpose(block, axes)
+            if is_ferm:
+                parities = tuple(int(sym.parity(np.array([q]))[0]) for q in key)
+                sign = _koszul_sign(parities, axes)
+                if sign < 0:
+                    transposed = -transposed
+            new_blocks[new_key] = transposed
         obj = object.__new__(SymmetricTensor)
         obj._indices = new_indices
         obj._blocks = new_blocks
