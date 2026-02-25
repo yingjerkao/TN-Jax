@@ -983,7 +983,7 @@ def optimize_gs_ad(
     """AD-based ground state optimization of iPEPS.
 
     Uses automatic differentiation through the CTM fixed-point equation
-    (Lootens et al. PRR 7, 013237) to compute exact gradients of the
+    (Francuz et al. PRR 7, 013237) to compute exact gradients of the
     energy with respect to the site tensor A, then optimizes with optax.
 
     Args:
