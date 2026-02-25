@@ -44,6 +44,12 @@ from tnjax.algorithms.dmrg import (
     dmrg,
 )
 from tnjax.algorithms.hotrg import HOTRGConfig, hotrg
+from tnjax.algorithms.idmrg import (
+    build_bulk_mpo_heisenberg,
+    idmrg,
+    iDMRGConfig,
+    iDMRGResult,
+)
 from tnjax.algorithms.ipeps import (
     CTMConfig,
     CTMEnvironment,
@@ -124,6 +130,11 @@ __all__ = [
     # HOTRG
     "HOTRGConfig",
     "hotrg",
+    # iDMRG
+    "iDMRGConfig",
+    "iDMRGResult",
+    "idmrg",
+    "build_bulk_mpo_heisenberg",
     # iPEPS
     "iPEPSConfig",
     "CTMConfig",
