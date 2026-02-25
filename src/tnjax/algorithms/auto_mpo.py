@@ -27,7 +27,7 @@ import numpy as np
 
 from tnjax.core.index import FlowDirection, TensorIndex
 from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor
+from tnjax.core.tensor import DenseTensor, SymmetricTensor
 from tnjax.network.network import TensorNetwork
 
 # ---------------------------------------------------------------------------
@@ -244,6 +244,150 @@ def _compress_mpo_bond(
     return w_left_new, w_right_new
 
 
+def _compute_operator_charge(op: np.ndarray, phys_charges: np.ndarray) -> int:
+    """Determine the U(1) charge transfer of a single-site operator.
+
+    For a nonzero element ``op[i, j]``, the charge transfer is
+    ``phys_charges[i] - phys_charges[j]``.  All nonzero elements must
+    agree; otherwise the operator mixes charge sectors.
+
+    Args:
+        op:            Square (d, d) operator matrix.
+        phys_charges:  Physical-leg charge array of length d.
+
+    Returns:
+        Integer charge transfer.
+
+    Raises:
+        ValueError: If the operator has nonzero entries with inconsistent
+            charge transfers (i.e., it is not a well-defined irrep operator).
+    """
+    charge: int | None = None
+    for i in range(op.shape[0]):
+        for j in range(op.shape[1]):
+            if abs(op[i, j]) > 1e-14:
+                q = int(phys_charges[i]) - int(phys_charges[j])
+                if charge is None:
+                    charge = q
+                elif q != charge:
+                    raise ValueError(
+                        f"Operator mixes charge sectors: found transfers "
+                        f"{charge} and {q}."
+                    )
+    if charge is None:
+        return 0  # zero operator → neutral
+    return charge
+
+
+def _compute_bond_charges(
+    terms: list[HamiltonianTerm],
+    bond_states: list[dict[int, int]],
+    L: int,
+    phys_charges: np.ndarray,
+) -> list[np.ndarray]:
+    """Compute the U(1) charge array for each internal MPO bond.
+
+    At bond ``j`` (between sites ``j`` and ``j + 1``), an in-flight term
+    carries the accumulated charge transfer from the operators applied on
+    sites ``0 .. j``.  The "done" state (index 0) and "vacuum" state
+    (last index) both carry charge 0.
+
+    Args:
+        terms:         List of Hamiltonian terms.
+        bond_states:   Output of ``_assign_bond_states``.
+        L:             Chain length.
+        phys_charges:  Physical-leg charge array (length d).
+
+    Returns:
+        List of length ``L - 1``, each entry an ``np.ndarray`` of int32
+        charges with size ``len(bond_states[j]) + 2``.
+    """
+    bond_charges: list[np.ndarray] = []
+    for j in range(L - 1):
+        D = len(bond_states[j]) + 2
+        charges = np.zeros(D, dtype=np.int32)
+        # charges[0] = 0  (done state)
+        # charges[D-1] = 0  (vacuum state)
+        for t_id, state_idx in bond_states[j].items():
+            term = terms[t_id]
+            # Accumulate charge transfer from ops on sites <= j
+            acc = 0
+            for site, op in term.ops:
+                if site <= j:
+                    acc += _compute_operator_charge(op, phys_charges)
+            charges[state_idx] = acc
+        bond_charges.append(charges)
+    return bond_charges
+
+
+def _w_matrices_to_symmetric_mpo(
+    w_matrices: list[np.ndarray],
+    d: int,
+    phys_charges: np.ndarray,
+    bond_charges: list[np.ndarray],
+    dtype: Any = jnp.float32,
+    name: str = "AutoMPO_sym",
+) -> TensorNetwork:
+    """Wrap W-matrices into a TensorNetwork of SymmetricTensor nodes.
+
+    Same structure as ``_w_matrices_to_mpo`` but uses physical charges
+    and per-bond charges to build proper ``SymmetricTensor`` objects.
+
+    Args:
+        w_matrices:   One ndarray per site, shape (D_l, d, d, D_r).
+        d:            Local Hilbert-space dimension.
+        phys_charges: Physical-leg charge array (length d).
+        bond_charges: Per-bond charge arrays from ``_compute_bond_charges``.
+        dtype:        JAX dtype for on-device tensors.
+        name:         TensorNetwork name.
+
+    Returns:
+        TensorNetwork MPO with SymmetricTensor nodes.
+    """
+    L = len(w_matrices)
+    sym = U1Symmetry()
+
+    mpo = TensorNetwork(name=name)
+
+    for i, W_np in enumerate(w_matrices):
+        D_l, _, _, D_r = W_np.shape
+        W = jnp.array(W_np, dtype=dtype)
+
+        # Bond charges: left boundary = [0], right boundary = [0]
+        if i == 0:
+            left_charges = np.zeros(D_l, dtype=np.int32)
+        else:
+            left_charges = bond_charges[i - 1]
+
+        if i == L - 1:
+            right_charges = np.zeros(D_r, dtype=np.int32)
+        else:
+            right_charges = bond_charges[i]
+
+        left_label = "w_left_0" if i == 0 else f"w{i - 1}_{i}"
+        right_label = "w_right" if i == L - 1 else f"w{i}_{i + 1}"
+
+        indices = (
+            TensorIndex(sym, left_charges, FlowDirection.IN, label=left_label),
+            TensorIndex(sym, phys_charges, FlowDirection.IN, label=f"mpo_top_{i}"),
+            TensorIndex(sym, phys_charges, FlowDirection.OUT, label=f"mpo_bot_{i}"),
+            TensorIndex(sym, right_charges, FlowDirection.OUT, label=right_label),
+        )
+        tensor = SymmetricTensor.from_dense(W, indices)
+        mpo.add_node(i, tensor)
+
+    # Connect virtual MPO bonds by shared label
+    for i in range(L - 1):
+        shared = set(mpo.get_tensor(i).labels()) & set(mpo.get_tensor(i + 1).labels())
+        for label in sorted(shared, key=str):
+            try:
+                mpo.connect(i, label, i + 1, label)
+            except (ValueError, KeyError):
+                pass
+
+    return mpo
+
+
 def _w_matrices_to_mpo(
     w_matrices: list[np.ndarray],
     d: int,
@@ -418,15 +562,22 @@ class AutoMPO:
         compress: bool = False,
         compress_tol: float = 1e-12,
         dtype: Any = jnp.float32,
+        symmetric: bool = False,
+        phys_charges: np.ndarray | None = None,
     ) -> TensorNetwork:
         """Build and return the MPO as a TensorNetwork.
 
         Args:
-            compress:     Apply a left-to-right SVD compression pass to
-                          reduce bond dimension (approximate; not globally
-                          optimal but useful for long-range interactions).
-            compress_tol: Relative singular-value threshold for compression.
-            dtype:        JAX dtype for on-device MPO tensors.
+            compress:      Apply a left-to-right SVD compression pass to
+                           reduce bond dimension (approximate; not globally
+                           optimal but useful for long-range interactions).
+            compress_tol:  Relative singular-value threshold for compression.
+            dtype:         JAX dtype for on-device MPO tensors.
+            symmetric:     If True, build a ``SymmetricTensor``-based MPO
+                           with proper U(1) charge assignments on every leg.
+            phys_charges:  Physical-leg charge array (length d).  If *None*,
+                           defaults to ``[1, -1]`` for d=2 and
+                           ``[2, 0, -2]`` for d=3.
 
         Returns:
             TensorNetwork with L site tensors in the standard MPO format,
@@ -449,6 +600,27 @@ class AutoMPO:
                 w_mats[j], w_mats[j + 1] = _compress_mpo_bond(
                     w_mats[j], w_mats[j + 1], tol=compress_tol
                 )
+
+        if symmetric:
+            if phys_charges is None:
+                if self.d == 2:
+                    phys_charges = np.array([1, -1], dtype=np.int32)
+                elif self.d == 3:
+                    phys_charges = np.array([2, 0, -2], dtype=np.int32)
+                else:
+                    raise ValueError(
+                        f"No default phys_charges for d={self.d}; "
+                        "provide phys_charges explicitly."
+                    )
+            else:
+                phys_charges = np.asarray(phys_charges, dtype=np.int32)
+            bond_charges = _compute_bond_charges(
+                self._terms, bond_states, self.L, phys_charges
+            )
+            return _w_matrices_to_symmetric_mpo(
+                w_mats, self.d, phys_charges, bond_charges,
+                dtype=dtype,
+            )
 
         return _w_matrices_to_mpo(w_mats, self.d, dtype=dtype)
 
@@ -479,18 +651,22 @@ def build_auto_mpo(
     compress: bool = False,
     compress_tol: float = 1e-12,
     dtype: Any = jnp.float32,
+    symmetric: bool = False,
+    phys_charges: np.ndarray | None = None,
 ) -> TensorNetwork:
     """Build an MPO from a list of term specifications.
 
     Args:
-        terms_spec: List of tuples ``(coeff, op1, site1, op2, site2, ...)``.
-        L:          Chain length (number of sites).
-        d:          Local Hilbert-space dimension (2 for spin-1/2).
-        site_ops:   Operator name → matrix dict; defaults to spin_half_ops()
-                    for d=2 and spin_one_ops() for d=3.
-        compress:   Apply left-to-right SVD compression.
-        compress_tol: Relative singular-value threshold for compression.
-        dtype:      JAX dtype for MPO tensors.
+        terms_spec:    List of tuples ``(coeff, op1, site1, op2, site2, ...)``.
+        L:             Chain length (number of sites).
+        d:             Local Hilbert-space dimension (2 for spin-1/2).
+        site_ops:      Operator name → matrix dict; defaults to spin_half_ops()
+                       for d=2 and spin_one_ops() for d=3.
+        compress:      Apply left-to-right SVD compression.
+        compress_tol:  Relative singular-value threshold for compression.
+        dtype:         JAX dtype for MPO tensors.
+        symmetric:     If True, build a ``SymmetricTensor``-based MPO.
+        phys_charges:  Physical-leg charge array (length d).
 
     Returns:
         TensorNetwork MPO compatible with ``dmrg()``.
@@ -507,4 +683,7 @@ def build_auto_mpo(
     auto = AutoMPO(L=L, d=d, site_ops=site_ops)
     for term in terms_spec:
         auto.add_term(term[0], *term[1:])
-    return auto.to_mpo(compress=compress, compress_tol=compress_tol, dtype=dtype)
+    return auto.to_mpo(
+        compress=compress, compress_tol=compress_tol, dtype=dtype,
+        symmetric=symmetric, phys_charges=phys_charges,
+    )

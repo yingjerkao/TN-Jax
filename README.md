@@ -8,8 +8,8 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 - **Label-based contraction** — legs are identified by string/integer labels; shared labels are automatically contracted (Cytnx-style)
 - **opt_einsum integration** — optimal contraction path finding for multi-tensor contractions
 - **Network class** — graph-based tensor network container with contraction caching
-- **Algorithms** — DMRG, TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
-- **AutoMPO** — build Hamiltonian MPOs from symbolic operator descriptions (custom couplings, NNN, arbitrary spin)
+- **Algorithms** — DMRG, iDMRG, TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
+- **AutoMPO** — build Hamiltonian MPOs from symbolic operator descriptions (custom couplings, NNN, arbitrary spin); supports `symmetric=True` for U(1) block-sparse MPOs
 - **AD-based iPEPS optimization** — gradient optimization via implicit differentiation through CTM fixed point (Francuz et al. PRR 7, 013237)
 - **Quasiparticle excitations** — iPEPS excitation spectra at arbitrary Brillouin-zone momenta (Ponsioen et al. 2022)
 - **Block-sparse SVD and QR** — native symmetry-aware decompositions for `SymmetricTensor`
@@ -88,6 +88,18 @@ result = dmrg(mpo, initial_mps, config)
 print(f"Ground state energy: {result.energy:.8f}")
 ```
 
+## iDMRG Example
+
+```python
+from tnjax import idmrg, build_bulk_mpo_heisenberg, iDMRGConfig
+
+W = build_bulk_mpo_heisenberg(Jz=1.0, Jxy=1.0)
+config = iDMRGConfig(max_bond_dim=32, max_iterations=100, convergence_tol=1e-8)
+result = idmrg(W, config)
+print(f"Energy per site: {result.energy_per_site:.6f}")  # ~ -0.4431
+print(f"Converged: {result.converged}")
+```
+
 ## TRG Example
 
 ```python
@@ -126,6 +138,9 @@ custom_ops = {
 terms = [(1.0, "Z", i, "Z", i + 1) for i in range(L - 1)]
 terms += [(0.5, "X", i) for i in range(L)]
 mpo = build_auto_mpo(terms, L=L, site_ops=custom_ops)
+
+# Build a symmetric (U(1) block-sparse) MPO
+mpo_sym = auto.to_mpo(symmetric=True)
 ```
 
 ## iPEPS AD Optimization and Excitations
