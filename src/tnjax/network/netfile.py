@@ -42,7 +42,6 @@ from tnjax.contraction.contractor import contract, contract_with_subscripts
 from tnjax.core.index import Label
 from tnjax.core.tensor import Tensor
 
-
 # ---------- .net file parser ----------
 
 
@@ -445,14 +444,14 @@ class NetworkBlueprint:
             # No label_order — check that the tensor already carries the
             # correct label *set*, then reorder if necessary.
             current = list(tensor.labels())
-            if sorted(str(l) for l in current) != sorted(blueprint_labels):
+            if sorted(str(lb) for lb in current) != sorted(blueprint_labels):
                 raise ValueError(
                     f"Tensor {name!r} labels {current} don't match blueprint "
                     f"labels {blueprint_labels} (as sets). Pass label_order "
                     f"to map them explicitly."
                 )
             # If order differs, transpose to match blueprint ordering
-            if [str(l) for l in current] != blueprint_labels:
+            if [str(lb) for lb in current] != blueprint_labels:
                 perm = [
                     next(
                         i for i, cl in enumerate(current) if str(cl) == bl
@@ -535,7 +534,7 @@ class NetworkBlueprint:
 
         # Apply TOUT permutation if needed
         if self._tout is not None and self._tout:
-            current = [str(l) for l in result.labels()]
+            current = [str(lb) for lb in result.labels()]
             if current != self._tout:
                 perm = [current.index(lbl) for lbl in self._tout]
                 result = result.transpose(tuple(perm))

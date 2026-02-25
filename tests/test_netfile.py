@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tnjax.core.index import FlowDirection, TensorIndex
@@ -16,7 +16,6 @@ from tnjax.network.netfile import (
     from_netfile,
     parse_netfile,
 )
-
 
 # ===================================================================
 # Helper: make a simple DenseTensor with trivial symmetry
