@@ -2,12 +2,14 @@
 
 import math
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from tnjax.algorithms.idmrg import (
     build_bulk_mpo_heisenberg,
+    build_bulk_mpo_heisenberg_cylinder,
     idmrg,
     iDMRGConfig,
     iDMRGResult,
@@ -64,7 +66,13 @@ class TestBuildBulkMPO:
         assert "mpo_top" in labels
         assert "mpo_bot" in labels
 
-    def test_dtype_default_float32(self):
+    def test_dtype_default(self):
+        W = build_bulk_mpo_heisenberg()
+        # Default is float64, but JAX truncates to float32 without x64 mode
+        expected = jnp.float64 if jax.config.x64_enabled else jnp.float32
+        assert W.todense().dtype == expected
+
+    def test_dtype_explicit_float32(self):
         W = build_bulk_mpo_heisenberg(dtype=jnp.float32)
         assert W.todense().dtype == jnp.float32
 
@@ -195,3 +203,83 @@ class TestiDMRGRun:
         result = idmrg(W, cfg)
         assert len(result.energies_per_step) <= n_iter
         assert len(result.energies_per_step) > 0
+
+
+# ---------------------------------------------------------------------------
+# TestBuildBulkMPOCylinder
+# ---------------------------------------------------------------------------
+
+
+class TestBuildBulkMPOCylinder:
+    def test_shape_ly2(self):
+        W = build_bulk_mpo_heisenberg_cylinder(Ly=2)
+        dense = W.todense()
+        # D_w = 3*2+2 = 8, d = 2^2 = 4
+        assert dense.shape == (8, 4, 4, 8)
+
+    def test_shape_ly4(self):
+        W = build_bulk_mpo_heisenberg_cylinder(Ly=4)
+        dense = W.todense()
+        # D_w = 3*4+2 = 14, d = 2^4 = 16
+        assert dense.shape == (14, 16, 16, 14)
+
+    def test_labels(self):
+        W = build_bulk_mpo_heisenberg_cylinder(Ly=2)
+        labels = W.labels()
+        assert "w_l" in labels
+        assert "w_r" in labels
+        assert "mpo_top" in labels
+        assert "mpo_bot" in labels
+
+    def test_invalid_ly_zero_raises(self):
+        with pytest.raises(ValueError, match="Ly must be >= 1"):
+            build_bulk_mpo_heisenberg_cylinder(Ly=0)
+
+    def test_odd_ly_raises(self):
+        """Odd Ly is incompatible with AFM order on the square lattice."""
+        with pytest.raises(ValueError, match="Ly must be even"):
+            build_bulk_mpo_heisenberg_cylinder(Ly=3)
+
+    def test_h_ring_hermitian_ly2(self):
+        """The within-ring Hamiltonian block should be Hermitian."""
+        W = build_bulk_mpo_heisenberg_cylinder(Ly=2)
+        dense = W.todense()
+        D_w = dense.shape[0]
+        # h_ring = W[D_w-1, :, :, 0]  (vacuum → done)
+        h_ring = dense[D_w - 1, :, :, 0]
+        np.testing.assert_allclose(
+            np.array(h_ring), np.array(h_ring.T), atol=1e-12,
+            err_msg="h_ring should be Hermitian (real symmetric)"
+        )
+
+    def test_h_ring_hermitian_ly4(self):
+        """The within-ring Hamiltonian block should be Hermitian for Ly=4."""
+        W = build_bulk_mpo_heisenberg_cylinder(Ly=4)
+        dense = W.todense()
+        D_w = dense.shape[0]
+        h_ring = dense[D_w - 1, :, :, 0]
+        np.testing.assert_allclose(
+            np.array(h_ring), np.array(h_ring.T), atol=1e-12,
+            err_msg="h_ring should be Hermitian (real symmetric)"
+        )
+
+
+class TestiDMRGCylinderRun:
+    def test_ly2_runs_and_converges(self):
+        """iDMRG with Ly=2 cylinder should run and give reasonable energy."""
+        W = build_bulk_mpo_heisenberg_cylinder(Ly=2)
+        cfg = iDMRGConfig(
+            max_bond_dim=16,
+            max_iterations=50,
+            convergence_tol=1e-4,
+            lanczos_max_iter=30,
+            lanczos_tol=1e-12,
+        )
+        result = idmrg(W, cfg, d=4)
+        e_per_spin = result.energy_per_site / 2
+        assert np.isfinite(e_per_spin)
+        # The 2D Heisenberg energy per spin should be negative and
+        # reasonable for a Ly=2 cylinder
+        assert -1.0 < e_per_spin < -0.3, (
+            f"Ly=2 e/spin = {e_per_spin:.6f} out of expected range"
+        )
