@@ -8,6 +8,8 @@ from tnjax.algorithms.auto_mpo import (
     HamiltonianTerm,
     _assign_bond_states,
     _build_w_matrices,
+    _compute_bond_charges,
+    _compute_operator_charge,
     build_auto_mpo,
     spin_half_ops,
     spin_one_ops,
@@ -18,6 +20,7 @@ from tnjax.algorithms.dmrg import (
     build_random_mps,
     dmrg,
 )
+from tnjax.core.tensor import SymmetricTensor
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -551,3 +554,147 @@ class TestBuildAutoMPOFunctional:
         )
         assert term.coefficient == 0.5
         assert len(term.ops) == 2
+
+
+# ---------------------------------------------------------------------------
+# TestAutoMPOSymmetric
+# ---------------------------------------------------------------------------
+
+
+class TestAutoMPOSymmetric:
+    """Tests for symmetric (SymmetricTensor-based) MPO construction."""
+
+    def test_symmetric_mpo_todense_matches_dense(self):
+        """The dense representation of a symmetric MPO should match a dense MPO."""
+        L = 4
+        terms = _heisenberg_terms(L)
+        mpo_dense = build_auto_mpo(terms, L=L, dtype=np.float64)
+        mpo_sym = build_auto_mpo(terms, L=L, dtype=np.float64, symmetric=True)
+
+        assert mpo_sym.n_nodes() == L
+        for i in range(L):
+            d_arr = mpo_dense.get_tensor(i).todense()
+            s_arr = mpo_sym.get_tensor(i).todense()
+            np.testing.assert_allclose(
+                np.array(s_arr), np.array(d_arr), atol=1e-12,
+                err_msg=f"Site {i}: symmetric todense != dense"
+            )
+
+    def test_symmetric_mpo_blocks_are_nontrivial(self):
+        """Symmetric MPO tensors should have fewer elements than the full dense size."""
+        L = 4
+        terms = _heisenberg_terms(L)
+        mpo_sym = build_auto_mpo(terms, L=L, symmetric=True)
+
+        for i in range(L):
+            tensor = mpo_sym.get_tensor(i)
+            assert isinstance(tensor, SymmetricTensor), (
+                f"Site {i}: expected SymmetricTensor, got {type(tensor).__name__}"
+            )
+            assert tensor.n_blocks > 0, f"Site {i}: no blocks"
+            # The total number of stored elements should be less than the
+            # full dense tensor size for at least bulk sites.
+            dense = tensor.todense()
+            total_dense = int(np.prod(dense.shape))
+            stored = sum(
+                int(np.prod(b.shape)) for b in tensor.blocks.values()
+            )
+            if i > 0 and i < L - 1:
+                assert stored < total_dense, (
+                    f"Site {i}: stored ({stored}) >= dense ({total_dense})"
+                )
+
+    def test_symmetric_heisenberg_bond_charges(self):
+        """Bond charge arrays should be [0, 0, 2, -2, 0] for Heisenberg."""
+        L = 4
+        ops = spin_half_ops()
+        terms_list = []
+        for i in range(L - 1):
+            terms_list.append(
+                HamiltonianTerm(1.0, ((i, ops["Sz"]), (i + 1, ops["Sz"])))
+            )
+            terms_list.append(
+                HamiltonianTerm(0.5, ((i, ops["Sp"]), (i + 1, ops["Sm"])))
+            )
+            terms_list.append(
+                HamiltonianTerm(0.5, ((i, ops["Sm"]), (i + 1, ops["Sp"])))
+            )
+        bond_states = _assign_bond_states(terms_list, L)
+        phys_charges = np.array([1, -1], dtype=np.int32)
+        bond_charges = _compute_bond_charges(
+            terms_list, bond_states, L, phys_charges
+        )
+
+        # Each bond should have D=5: [done=0, Sz=0, Sp=2, Sm=-2, vac=0]
+        for j, bc in enumerate(bond_charges):
+            assert len(bc) == 5, f"Bond {j}: expected 5 charges, got {len(bc)}"
+            assert bc[0] == 0, f"Bond {j}: done state should be charge 0"
+            assert bc[-1] == 0, f"Bond {j}: vacuum state should be charge 0"
+            # In-flight charges should include 0 (Sz), 2 (Sp), -2 (Sm)
+            inner = sorted(bc[1:-1])
+            assert inner == [-2, 0, 2], (
+                f"Bond {j}: expected inner charges [-2, 0, 2], got {inner}"
+            )
+
+    def test_symmetric_dmrg_energy_matches_dense(self):
+        """DMRG with a symmetric MPO should give the same energy as dense."""
+        L = 4
+        terms = _heisenberg_terms(L)
+        mpo_dense = build_auto_mpo(terms, L=L)
+        mpo_sym = build_auto_mpo(terms, L=L, symmetric=True)
+
+        config = DMRGConfig(
+            max_bond_dim=16, num_sweeps=6, lanczos_max_iter=15, verbose=False
+        )
+        seed = 42
+        mps1 = build_random_mps(L, physical_dim=2, bond_dim=4, seed=seed)
+        mps2 = build_random_mps(L, physical_dim=2, bond_dim=4, seed=seed)
+
+        res_dense = dmrg(mpo_dense, mps1, config)
+        res_sym = dmrg(mpo_sym, mps2, config)
+
+        assert abs(res_sym.energy - res_dense.energy) < 0.05, (
+            f"Symmetric DMRG energy {res_sym.energy:.4f} differs from "
+            f"dense {res_dense.energy:.4f}"
+        )
+
+    def test_symmetric_spin_one(self):
+        """Symmetric MPO should work for d=3 (spin-1)."""
+        L = 3
+        auto = AutoMPO(L=L, d=3)
+        for i in range(L - 1):
+            auto += (1.0, "Sz", i, "Sz", i + 1)
+            auto += (0.5, "Sp", i, "Sm", i + 1)
+            auto += (0.5, "Sm", i, "Sp", i + 1)
+
+        mpo_dense = auto.to_mpo(dtype=np.float64)
+        mpo_sym = auto.to_mpo(dtype=np.float64, symmetric=True)
+
+        assert mpo_sym.n_nodes() == L
+        for i in range(L):
+            d_arr = mpo_dense.get_tensor(i).todense()
+            s_arr = mpo_sym.get_tensor(i).todense()
+            np.testing.assert_allclose(
+                np.array(s_arr), np.array(d_arr), atol=1e-12,
+                err_msg=f"Spin-1 site {i}: symmetric todense != dense"
+            )
+
+    def test_operator_charge_detection(self):
+        """_compute_operator_charge should detect correct charges."""
+        ops = spin_half_ops()
+        phys = np.array([1, -1], dtype=np.int32)
+
+        assert _compute_operator_charge(ops["Sz"], phys) == 0
+        assert _compute_operator_charge(ops["Sp"], phys) == 2
+        assert _compute_operator_charge(ops["Sm"], phys) == -2
+        assert _compute_operator_charge(ops["Id"], phys) == 0
+
+    def test_operator_charge_spin_one(self):
+        """Charge detection for spin-1 operators."""
+        ops = spin_one_ops()
+        phys = np.array([2, 0, -2], dtype=np.int32)
+
+        assert _compute_operator_charge(ops["Sz"], phys) == 0
+        assert _compute_operator_charge(ops["Sp"], phys) == 2
+        assert _compute_operator_charge(ops["Sm"], phys) == -2
+        assert _compute_operator_charge(ops["Id"], phys) == 0

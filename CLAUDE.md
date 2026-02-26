@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Always open a PR instead of pushing directly to `main`.
 - Merge PRs with `gh pr merge <number> --squash --delete-branch --auto` so CI must pass first.
 - `main` has branch protection: `Tests (Python 3.11)` and `Tests (Python 3.12)` must pass.
+- Branch protection requires the PR branch to be up-to-date with `main`. If behind, merge main into the branch (`git merge origin/main`) rather than rebasing — rebase can get stuck on `--continue`.
 
 
 
@@ -18,5 +19,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Known Gotchas
 
+- **MPO index convention**: `W[w_l, ket, bra, w_r]`. The DMRG effective-Hamiltonian matvec einsum is `"abc,apqd,bpse,eqtf,dfg->cstg"` where `p,q` are ket and `s,t` are bra physical indices.
 - **NumPy ≥2.0**: Adding a Python `complex` scalar (even `1+0j`) into a `float64` array raises `UFuncOutputCastingError`. Extract `.real` or use `complex128` dtype explicitly.
-- **Local tests**: `uv run pytest` fails on macOS x86_64 (jaxlib has no wheel for this platform). Tests only run reliably in CI.
+- **Local tests**: `uv run pytest` may fail on macOS x86_64 if jaxlib has no wheel. JAX x64 is not enabled locally — `float64` silently truncates to `float32`.

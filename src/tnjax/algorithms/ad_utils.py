@@ -1,6 +1,6 @@
 """Stable automatic differentiation utilities for iPEPS.
 
-Implements the solutions from Lootens et al., Phys. Rev. Research 7, 013237
+Implements the solutions from Francuz et al., Phys. Rev. Research 7, 013237
 (2025) for stable AD through CTM:
 
 1. Custom truncated SVD with Lorentzian regularization for degenerate singular
@@ -68,11 +68,11 @@ def _truncated_svd_ad_bwd(
 ) -> tuple[jax.Array]:
     """Backward pass with Lorentzian regularization and truncation term.
 
-    Implements the stable SVD adjoint from Lootens et al. PRR 7, 013237:
+    Implements the stable SVD adjoint from Francuz et al. PRR 7, 013237:
     - Lorentzian broadening ``s_i^2 - s_j^2 / ((s_i^2-s_j^2)^2 + eps^2)``
       prevents divergences from degenerate singular values.
     - Full truncation correction accounts for coupling between kept and
-      discarded subspaces (the dominant error source identified by Lootens
+      discarded subspaces (the dominant error source identified by Francuz
       et al.).
     """
     U_full, s_full, Vh_full, M, k = residuals
@@ -107,7 +107,7 @@ def _truncated_svd_ad_bwd(
     proj_U_perp = jnp.eye(M.shape[0]) - U @ U.conj().T
     proj_V_perp = jnp.eye(M.shape[1]) - V @ V.conj().T
 
-    # Assemble gradient (Wan & Narayanan 2023 / Lootens et al.):
+    # Assemble gradient (Wan & Narayanan 2023 / Francuz et al.):
     dM = jnp.zeros_like(M)
 
     # 1. Diagonal part from ds
@@ -190,7 +190,7 @@ def _gauge_fix_ctm(env: CTMEnvironment) -> CTMEnvironment:
     """Fix gauge of CTM tensors via QR decomposition of corners.
 
     Ensures unique element-wise convergence needed for fixed-point
-    implicit differentiation (Lootens et al. PRR 7, 013237).
+    implicit differentiation (Francuz et al. PRR 7, 013237).
 
     Each corner C is replaced by R from its QR decomposition (C = Q R),
     and the corresponding Q factors are absorbed into the adjacent edge
@@ -345,7 +345,7 @@ def _ctm_converge_bwd(
 ) -> tuple[jax.Array]:
     """Backward pass via implicit differentiation of CTM fixed point.
 
-    Solves ``(I - J^T) lambda = g`` using GMRES (Lootens et al. PRR 7,
+    Solves ``(I - J^T) lambda = g`` using GMRES (Francuz et al. PRR 7,
     013237), where J = d(ctm_step)/d(env) is the Jacobian of one CTM step.
     Then ``dA = d(ctm_step)/dA^T @ lambda``.
     """
@@ -368,7 +368,7 @@ def _ctm_converge_bwd(
         env_out = _gauge_fix_ctm(env_out)
         return tuple(env_out)
 
-    # Solve (I - J_env^T) lambda = g via GMRES (Lootens et al. PRR 7, 013237).
+    # Solve (I - J_env^T) lambda = g via GMRES (Francuz et al. PRR 7, 013237).
     # GMRES converges superlinearly (Krylov acceleration) and directly
     # monitors the residual norm, unlike the Neumann series which converges
     # only geometrically with rate equal to the spectral radius.

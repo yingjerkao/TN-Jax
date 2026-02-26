@@ -8,9 +8,10 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 - **Label-based contraction** — legs are identified by string/integer labels; shared labels are automatically contracted (Cytnx-style)
 - **opt_einsum integration** — optimal contraction path finding for multi-tensor contractions
 - **Network class** — graph-based tensor network container with contraction caching
-- **Algorithms** — DMRG, TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
-- **AutoMPO** — build Hamiltonian MPOs from symbolic operator descriptions (custom couplings, NNN, arbitrary spin)
-- **AD-based iPEPS optimization** — gradient optimization via implicit differentiation through CTM fixed point (Lootens et al. PRR 7, 013237)
+- **`.net` file support** — cytnx-style declarative network topology; parse once, load tensors, contract repeatedly (template pattern)
+- **Algorithms** — DMRG, iDMRG, TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
+- **AutoMPO** — build Hamiltonian MPOs from symbolic operator descriptions (custom couplings, NNN, arbitrary spin); supports `symmetric=True` for U(1) block-sparse MPOs
+- **AD-based iPEPS optimization** — gradient optimization via implicit differentiation through CTM fixed point (Francuz et al. PRR 7, 013237)
 - **Quasiparticle excitations** — iPEPS excitation spectra at arbitrary Brillouin-zone momenta (Ponsioen et al. 2022)
 - **Block-sparse SVD and QR** — native symmetry-aware decompositions for `SymmetricTensor`
 - **Extensible symmetry system** — non-Abelian symmetry interface for future SU(2) support
@@ -71,6 +72,30 @@ tn.connect_by_shared_label("A", "B")
 result = tn.contract()
 ```
 
+## Network Blueprint (`.net` file) Example
+
+```python
+from tnjax import NetworkBlueprint
+
+# Define network topology as a string (or read from a .net file)
+bp = NetworkBlueprint("""
+L: a, b, c
+M: a, p, q, d
+A: b, p, s, e
+M2: e, q, t, f
+R: d, f, g
+TOUT: c, s, t, g
+""")
+
+# Load tensors (can be DenseTensor or SymmetricTensor)
+bp.put_tensors({"L": L, "M": M, "A": A, "M2": M2, "R": R})
+result = bp.launch()  # contracts the full network
+
+# Reuse with different tensors (e.g. in a DMRG sweep)
+bp.put_tensor("A", new_A)
+result2 = bp.launch()
+```
+
 ## DMRG Example
 
 ```python
@@ -86,6 +111,18 @@ mpo = build_mpo_heisenberg(L, Jz=1.0, Jxy=1.0)
 config = DMRGConfig(max_bond_dim=50, num_sweeps=10)
 result = dmrg(mpo, initial_mps, config)
 print(f"Ground state energy: {result.energy:.8f}")
+```
+
+## iDMRG Example
+
+```python
+from tnjax import idmrg, build_bulk_mpo_heisenberg, iDMRGConfig
+
+W = build_bulk_mpo_heisenberg(Jz=1.0, Jxy=1.0)
+config = iDMRGConfig(max_bond_dim=32, max_iterations=100, convergence_tol=1e-8)
+result = idmrg(W, config)
+print(f"Energy per site: {result.energy_per_site:.6f}")  # ~ -0.4431
+print(f"Converged: {result.converged}")
 ```
 
 ## TRG Example
@@ -126,6 +163,9 @@ custom_ops = {
 terms = [(1.0, "Z", i, "Z", i + 1) for i in range(L - 1)]
 terms += [(0.5, "X", i) for i in range(L)]
 mpo = build_auto_mpo(terms, L=L, site_ops=custom_ops)
+
+# Build a symmetric (U(1) block-sparse) MPO
+mpo_sym = auto.to_mpo(symmetric=True)
 ```
 
 ## iPEPS AD Optimization and Excitations
@@ -145,7 +185,7 @@ gate = jnp.einsum("ij,kl->ikjl", Sz, Sz) \
      + 0.5 * (jnp.einsum("ij,kl->ikjl", Sp, Sm)
              + jnp.einsum("ij,kl->ikjl", Sm, Sp))
 
-# AD ground-state optimization (Lootens et al. PRR 7, 013237)
+# AD ground-state optimization (Francuz et al. PRR 7, 013237)
 config = iPEPSConfig(
     max_bond_dim=2,
     ctm=CTMConfig(chi=16, max_iter=50),
@@ -207,7 +247,8 @@ The generated HTML is in `docs/_build/html/`.
 
 ## References
 
-- T. Lootens, B. Vanhecke, F. Verstraete, *PRR* **7**, 013237 (2025) — AD-based iPEPS ground-state optimization
+- H.-J. Liao, J.-G. Liu, L. Wang, T. Xiang, *Phys. Rev. X* **9**, 031041 (2019) — AD-based iPEPS ground-state optimization
+- A. Francuz, N. Schuch, B. Vanhecke, *PRR* **7**, 013237 (2025) — Stable AD through CTM (SVD regularization, truncation correction, implicit differentiation)
 - L. Ponsioen, F. F. Assaad, P. Corboz, *SciPost Phys.* **12**, 006 (2022) — Quasiparticle excitations for iPEPS
 
 ## License

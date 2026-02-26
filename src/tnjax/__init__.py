@@ -44,6 +44,12 @@ from tnjax.algorithms.dmrg import (
     dmrg,
 )
 from tnjax.algorithms.hotrg import HOTRGConfig, hotrg
+from tnjax.algorithms.idmrg import (
+    build_bulk_mpo_heisenberg,
+    idmrg,
+    iDMRGConfig,
+    iDMRGResult,
+)
 from tnjax.algorithms.ipeps import (
     CTMConfig,
     CTMEnvironment,
@@ -82,6 +88,7 @@ from tnjax.core.symmetry import (
     ZnSymmetry,
 )
 from tnjax.core.tensor import BlockKey, DenseTensor, SymmetricTensor, Tensor
+from tnjax.network.netfile import NetworkBlueprint, from_netfile
 from tnjax.network.network import TensorNetwork, build_mps, build_peps
 
 __version__ = "0.1.0"
@@ -132,6 +139,11 @@ __all__ = [
     # HOTRG
     "HOTRGConfig",
     "hotrg",
+    # iDMRG
+    "iDMRGConfig",
+    "iDMRGResult",
+    "idmrg",
+    "build_bulk_mpo_heisenberg",
     # iPEPS
     "iPEPSConfig",
     "CTMConfig",
@@ -148,4 +160,6 @@ __all__ = [
     "TensorNetwork",
     "build_mps",
     "build_peps",
+    "NetworkBlueprint",
+    "from_netfile",
 ]
