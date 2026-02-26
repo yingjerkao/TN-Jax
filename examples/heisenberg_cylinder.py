@@ -26,6 +26,10 @@ Usage::
 
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("JAX_ENABLE_X64", "1")
+
 import time
 
 import numpy as np
@@ -189,7 +193,7 @@ def run_cylinder_dmrg(
         num_sweeps=num_sweeps,
         convergence_tol=1e-8,
         two_site=True,
-        lanczos_max_iter=40,
+        lanczos_max_iter=50,
         noise=0.0,
         verbose=True,
     )
@@ -242,7 +246,7 @@ def main():
     # --- Configuration 2: 6x3 cylinder (18 sites) ---
     run_cylinder_dmrg(
         Lx=6, Ly=3,
-        max_bond_dim=64,
+        max_bond_dim=100,
         num_sweeps=10,
         initial_bond_dim=16,
         ed_check=False,
@@ -251,8 +255,8 @@ def main():
     # --- Configuration 3: 8x4 cylinder (32 sites) ---
     run_cylinder_dmrg(
         Lx=8, Ly=4,
-        max_bond_dim=128,
-        num_sweeps=8,
+        max_bond_dim=200,
+        num_sweeps=15,
         initial_bond_dim=16,
         ed_check=False,
     )

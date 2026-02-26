@@ -19,11 +19,28 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 ## Installation
 
 ```bash
-# Using uv (recommended)
-uv add tnjax
-
-# Using pip
+# CPU only (default)
 pip install tnjax
+
+# NVIDIA GPU (CUDA 13)
+pip install tnjax[cuda13]
+
+# NVIDIA GPU (CUDA 12)
+pip install tnjax[cuda12]
+
+# Google Cloud TPU
+pip install tnjax[tpu]
+
+# Apple Silicon GPU (macOS, experimental)
+pip install tnjax[metal]
+```
+
+For development:
+
+```bash
+git clone https://github.com/yingjerkao/TN-Jax.git
+cd TN-Jax
+uv sync --all-extras --dev
 ```
 
 ## Quick Start
@@ -112,6 +129,38 @@ config = DMRGConfig(max_bond_dim=50, num_sweeps=10)
 result = dmrg(mpo, initial_mps, config)
 print(f"Ground state energy: {result.energy:.8f}")
 ```
+
+## 2D Cylinder DMRG Example
+
+```python
+from tnjax import AutoMPO, DMRGConfig, build_random_mps, dmrg
+
+# Build Heisenberg Hamiltonian on a 6x3 cylinder via AutoMPO
+Lx, Ly, N = 6, 3, 18
+auto = AutoMPO(L=N, d=2)
+for x in range(Lx):
+    for y in range(Ly):
+        # Within-ring bond (periodic y)
+        i, j = x * Ly + y, x * Ly + (y + 1) % Ly
+        auto += (1.0, "Sz", min(i,j), "Sz", max(i,j))
+        auto += (0.5, "Sp", min(i,j), "Sm", max(i,j))
+        auto += (0.5, "Sm", min(i,j), "Sp", max(i,j))
+        # Between-ring bond (open x)
+        if x < Lx - 1:
+            i, j = x * Ly + y, (x + 1) * Ly + y
+            auto += (1.0, "Sz", i, "Sz", j)
+            auto += (0.5, "Sp", i, "Sm", j)
+            auto += (0.5, "Sm", i, "Sp", j)
+
+mpo = auto.to_mpo(compress=True)
+mps = build_random_mps(N, physical_dim=2, bond_dim=16)
+config = DMRGConfig(max_bond_dim=100, num_sweeps=10, verbose=True)
+result = dmrg(mpo, mps, config)
+print(f"E/N = {result.energy / N:.8f}")  # converges in a few sweeps
+```
+
+See `examples/heisenberg_cylinder.py` for a full working example with
+4x2, 6x3, and 8x4 cylinders.
 
 ## iDMRG Example
 

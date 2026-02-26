@@ -29,11 +29,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cuda12 = ["jax[cuda12]>=0.4.30"]
-cuda13 = ["jax[cuda13]>=0.4.30"]
-cuda12-local = ["jax[cuda12-local]>=0.4.30"]
-cuda13-local = ["jax[cuda13-local]>=0.4.30"]
-tpu = ["jax[tpu]>=0.4.30"]
+cuda12 = ["jax[cuda12]>=0.4.30; sys_platform == 'linux'"]
+cuda13 = ["jax[cuda13]>=0.4.30; sys_platform == 'linux'"]
+cuda12-local = ["jax[cuda12-local]>=0.4.30; sys_platform == 'linux'"]
+cuda13-local = ["jax[cuda13-local]>=0.4.30; sys_platform == 'linux'"]
+tpu = ["jax[tpu]>=0.4.30; sys_platform == 'linux'"]
 metal = ["jax-metal>=0.1.1; sys_platform == 'darwin'"]
 dev = [
     "pytest>=8.0",

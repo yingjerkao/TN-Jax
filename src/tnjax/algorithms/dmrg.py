@@ -354,8 +354,10 @@ def _build_right_environments_list(
     return envs
 
 
-def _build_trivial_left_env() -> DenseTensor:
+def _build_trivial_left_env(dtype=None) -> DenseTensor:
     """Build trivial (1x1x1) left boundary environment."""
+    if dtype is None:
+        dtype = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32
     sym = U1Symmetry()
     bond = np.zeros(1, dtype=np.int32)
     indices = (
@@ -363,11 +365,13 @@ def _build_trivial_left_env() -> DenseTensor:
         TensorIndex(sym, bond, FlowDirection.IN,  label="env_mpo_l"),
         TensorIndex(sym, bond, FlowDirection.OUT, label="env_mps_conj_l"),
     )
-    return DenseTensor(jnp.ones((1, 1, 1), dtype=jnp.float32), indices)
+    return DenseTensor(jnp.ones((1, 1, 1), dtype=dtype), indices)
 
 
-def _build_trivial_right_env() -> DenseTensor:
+def _build_trivial_right_env(dtype=None) -> DenseTensor:
     """Build trivial (1x1x1) right boundary environment."""
+    if dtype is None:
+        dtype = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32
     sym = U1Symmetry()
     bond = np.zeros(1, dtype=np.int32)
     indices = (
@@ -375,7 +379,7 @@ def _build_trivial_right_env() -> DenseTensor:
         TensorIndex(sym, bond, FlowDirection.OUT, label="env_mpo_r"),
         TensorIndex(sym, bond, FlowDirection.IN,  label="env_mps_conj_r"),
     )
-    return DenseTensor(jnp.ones((1, 1, 1), dtype=jnp.float32), indices)
+    return DenseTensor(jnp.ones((1, 1, 1), dtype=dtype), indices)
 
 
 def _update_left_env(
@@ -805,6 +809,19 @@ def _svd_and_truncate_site(
         max_singular_values=config.max_bond_dim,
         max_truncation_err=config.svd_trunc_err,
     )
+
+    # Absorb singular values into the tensor moving away from the
+    # orthogonality center so the MPS stays in canonical form.
+    if sweep_right:
+        # Left-to-right: A = U (left-canonical), absorb s into B
+        B_data = B.todense()
+        s_shape = (-1,) + (1,) * (B_data.ndim - 1)
+        B = DenseTensor(s.reshape(s_shape) * B_data, B.indices)
+    else:
+        # Right-to-left: B = Vh (right-canonical), absorb s into A
+        A_data = A.todense()
+        s_shape = (1,) * (A_data.ndim - 1) + (-1,)
+        A = DenseTensor(A_data * s.reshape(s_shape), A.indices)
 
     return A, s, B, trunc_err
 
