@@ -77,6 +77,40 @@ $$H = J_z \sum_i S^z_i S^z_{i+1} + \frac{J_{xy}}{2} \sum_i (S^+_i S^-_{i+1} + S^
 
 For custom Hamiltonians, see the {doc}`auto_mpo` tutorial.
 
+## Example -- 2D Heisenberg cylinder
+
+For 2D systems, map the lattice to a 1D chain (column-major ordering) and
+use `AutoMPO` to build the long-range MPO:
+
+```python
+from tnjax import AutoMPO, DMRGConfig, build_random_mps, dmrg
+
+Lx, Ly, N = 8, 4, 32
+auto = AutoMPO(L=N, d=2)
+for x in range(Lx):
+    for y in range(Ly):
+        # Within-ring bond (periodic y-direction)
+        i, j = x * Ly + y, x * Ly + (y + 1) % Ly
+        auto += (1.0, "Sz", min(i,j), "Sz", max(i,j))
+        auto += (0.5, "Sp", min(i,j), "Sm", max(i,j))
+        auto += (0.5, "Sm", min(i,j), "Sp", max(i,j))
+        # Between-ring bond (open x-direction)
+        if x < Lx - 1:
+            i, j = x * Ly + y, (x + 1) * Ly + y
+            auto += (1.0, "Sz", i, "Sz", j)
+            auto += (0.5, "Sp", i, "Sm", j)
+            auto += (0.5, "Sm", i, "Sp", j)
+
+mpo = auto.to_mpo(compress=True)
+mps = build_random_mps(N, physical_dim=2, bond_dim=16)
+config = DMRGConfig(max_bond_dim=200, num_sweeps=15, verbose=True)
+result = dmrg(mpo, mps, config)
+print(f"E/N = {result.energy / N:.8f}")
+```
+
+See `examples/heisenberg_cylinder.py` for a complete working example with
+multiple cylinder sizes and exact-diagonalisation cross-checks.
+
 ## Label conventions
 
 MPS and MPO tensors follow these leg-label conventions:

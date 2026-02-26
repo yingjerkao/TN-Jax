@@ -22,20 +22,39 @@ cd TN-Jax
 uv sync --all-extras --dev
 ```
 
-## GPU support
+## Hardware acceleration
 
-TN-Jax uses JAX as its backend. To run on GPU, install the appropriate
-`jaxlib` build *before* installing TN-Jax:
+TN-Jax uses JAX as its backend. Install with a hardware-specific extra to
+enable GPU or TPU acceleration:
 
 ```bash
-# CUDA 12
-pip install jax[cuda12]
+# NVIDIA GPU (CUDA 13, recommended)
+pip install tnjax[cuda13]
 
-# Then install TN-Jax
+# NVIDIA GPU (CUDA 12)
+pip install tnjax[cuda12]
+
+# NVIDIA GPU with locally installed CUDA
+pip install tnjax[cuda12-local]
+pip install tnjax[cuda13-local]
+
+# Google Cloud TPU
+pip install tnjax[tpu]
+
+# Apple Silicon GPU (macOS only, experimental)
+pip install tnjax[metal]
+```
+
+For AMD ROCm GPUs, install JAX with ROCm support separately following
+[AMD's installation guide](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/3rd-party/jax-install.html),
+then install TN-Jax on top:
+
+```bash
+# After installing jax+jaxlib with ROCm
 pip install tnjax
 ```
 
-See the [JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) for other accelerator options.
+See the [JAX installation guide](https://docs.jax.dev/en/latest/installation.html) for the latest accelerator options.
 
 ## Building the documentation
 
