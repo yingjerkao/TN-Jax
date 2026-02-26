@@ -9,7 +9,7 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 - **opt_einsum integration** — optimal contraction path finding for multi-tensor contractions
 - **Network class** — graph-based tensor network container with contraction caching
 - **`.net` file support** — cytnx-style declarative network topology; parse once, load tensors, contract repeatedly (template pattern)
-- **Algorithms** — DMRG, iDMRG, TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
+- **Algorithms** — DMRG, iDMRG (1D chain & infinite cylinder), TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
 - **AutoMPO** — build Hamiltonian MPOs from symbolic operator descriptions (custom couplings, NNN, arbitrary spin); supports `symmetric=True` for U(1) block-sparse MPOs
 - **AD-based iPEPS optimization** — gradient optimization via implicit differentiation through CTM fixed point (Francuz et al. PRR 7, 013237)
 - **Quasiparticle excitations** — iPEPS excitation spectra at arbitrary Brillouin-zone momenta (Ponsioen et al. 2022)
@@ -173,6 +173,23 @@ result = idmrg(W, config)
 print(f"Energy per site: {result.energy_per_site:.6f}")  # ~ -0.4431
 print(f"Converged: {result.converged}")
 ```
+
+## Infinite Cylinder iDMRG Example
+
+```python
+from tnjax import build_bulk_mpo_heisenberg_cylinder, iDMRGConfig, idmrg
+
+# Ly=4 cylinder: each super-site is a ring of 4 spins (d=16, D_w=14)
+# Only even Ly is supported (odd Ly frustrates AFM order).
+W = build_bulk_mpo_heisenberg_cylinder(Ly=4)
+config = iDMRGConfig(max_bond_dim=200, max_iterations=200, convergence_tol=1e-4)
+result = idmrg(W, config, d=16)
+e_per_spin = result.energy_per_site / 4
+print(f"Energy per spin: {e_per_spin:.6f}")
+```
+
+See `examples/heisenberg_infinite_cylinder.py` for Ly=2 and Ly=4 cylinders
+with ED cross-checks.
 
 ## TRG Example
 

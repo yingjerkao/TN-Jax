@@ -89,7 +89,7 @@ def build_bulk_mpo_heisenberg(
     Jxy: float = 1.0,
     hz: float = 0.0,
     d: int = 2,
-    dtype: Any = jnp.float32,
+    dtype: Any = jnp.float64,
 ) -> DenseTensor:
     """Build a single bulk W-matrix for the spin-1/2 XXZ Heisenberg model.
 
@@ -139,12 +139,121 @@ def build_bulk_mpo_heisenberg(
     return DenseTensor(W, indices)
 
 
+def build_bulk_mpo_heisenberg_cylinder(
+    Ly: int,
+    J: float = 1.0,
+    dtype: Any = jnp.float64,
+) -> DenseTensor:
+    """Build a bulk W-matrix for the Heisenberg model on an infinite cylinder.
+
+    Each "super-site" represents an entire ring of ``Ly`` spins (physical
+    dimension ``d = 2**Ly``).  Within-ring Heisenberg bonds (periodic in y)
+    become an on-site term, and between-ring bonds become nearest-neighbour
+    MPO interactions.
+
+    The resulting MPO tensor can be passed directly to :func:`idmrg`.
+
+    Args:
+        Ly:    Circumference of the cylinder (number of spins per ring).
+        J:     Coupling constant (positive = antiferromagnetic).
+        dtype: JAX dtype for the tensor data.
+
+    Returns:
+        ``DenseTensor`` with legs ``("w_l", "mpo_top", "mpo_bot", "w_r")``
+        and shape ``(D_w, d, d, D_w)`` where ``D_w = 3*Ly + 2``, ``d = 2**Ly``.
+    """
+    if Ly < 1:
+        raise ValueError(f"Ly must be >= 1, got {Ly}")
+    if Ly % 2 != 0:
+        raise ValueError(
+            f"Ly must be even, got {Ly}. Odd circumference is incompatible "
+            "with Néel (AFM) order on the square lattice because the periodic "
+            "boundary creates frustrated odd-length cycles."
+        )
+
+    d = 2 ** Ly
+    D_w = 3 * Ly + 2
+
+    # --- Single-spin operators ---
+    Sz_1 = jnp.array([[0.5, 0.0], [0.0, -0.5]], dtype=dtype)
+    Sp_1 = jnp.array([[0.0, 1.0], [0.0, 0.0]], dtype=dtype)
+    Sm_1 = jnp.array([[0.0, 0.0], [1.0, 0.0]], dtype=dtype)
+    I2 = jnp.eye(2, dtype=dtype)
+    Id = jnp.eye(d, dtype=dtype)
+
+    # --- Embed single-spin operator at position y in a ring of Ly spins ---
+    def _embed(op_2x2: jax.Array, y: int) -> jax.Array:
+        """Embed a 2x2 operator at position y via Kronecker products."""
+        result = jnp.array([[1.0]], dtype=dtype)
+        for k in range(Ly):
+            result = jnp.kron(result, op_2x2 if k == y else I2)
+        return result
+
+    # Pre-compute embedded operators for each ring position
+    Sz = [_embed(Sz_1, y) for y in range(Ly)]
+    Sp = [_embed(Sp_1, y) for y in range(Ly)]
+    Sm = [_embed(Sm_1, y) for y in range(Ly)]
+
+    # --- Within-ring Heisenberg bonds (on-site term) ---
+    # Each unique bond (y, y_next) is counted once.  For Ly=2 the wrap-around
+    # (1→0) duplicates (0→1), so we track visited pairs to avoid overcounting.
+    h_ring = jnp.zeros((d, d), dtype=dtype)
+    seen_bonds: set[tuple[int, int]] = set()
+    if Ly >= 2:
+        for y in range(Ly):
+            y_next = (y + 1) % Ly
+            bond = (min(y, y_next), max(y, y_next))
+            if bond in seen_bonds:
+                continue
+            seen_bonds.add(bond)
+            h_ring = h_ring + J * (
+                Sz[y] @ Sz[y_next]
+                + 0.5 * (Sp[y] @ Sm[y_next] + Sm[y] @ Sp[y_next])
+            )
+
+    # --- Build MPO W-matrix ---
+    # Layout: row 0 = "done", rows 1..Ly = Sz channels, rows Ly+1..2Ly = Sp
+    # channels, rows 2Ly+1..3Ly = Sm channels, row D_w-1 = "vacuum".
+    W = jnp.zeros((D_w, d, d, D_w), dtype=dtype)
+
+    # done → done: identity
+    W = W.at[0, :, :, 0].set(Id)
+    # vacuum → vacuum: identity
+    W = W.at[D_w - 1, :, :, D_w - 1].set(Id)
+    # vacuum → done: within-ring Hamiltonian
+    W = W.at[D_w - 1, :, :, 0].set(h_ring)
+
+    for y in range(Ly):
+        # Channel completions: channel → done
+        W = W.at[y + 1, :, :, 0].set(Sz[y])              # Sz channel
+        W = W.at[Ly + y + 1, :, :, 0].set(Sp[y])         # S+ channel (completes S-·S+)
+        W = W.at[2 * Ly + y + 1, :, :, 0].set(Sm[y])     # S- channel (completes S+·S-)
+
+        # Channel initiations: vacuum → channel
+        W = W.at[D_w - 1, :, :, y + 1].set(J * Sz[y])              # vacuum → Sz
+        W = W.at[D_w - 1, :, :, Ly + y + 1].set((J / 2) * Sm[y])  # vacuum → Sp (send Sm)
+        W = W.at[D_w - 1, :, :, 2 * Ly + y + 1].set((J / 2) * Sp[y])  # vacuum → Sm (send Sp)
+
+    # --- Wrap as DenseTensor ---
+    sym = U1Symmetry()
+    bond_dw = np.zeros(D_w, dtype=np.int32)
+    bond_d = np.zeros(d, dtype=np.int32)
+
+    indices = (
+        TensorIndex(sym, bond_dw, FlowDirection.IN,  label="w_l"),
+        TensorIndex(sym, bond_d,  FlowDirection.IN,  label="mpo_top"),
+        TensorIndex(sym, bond_d,  FlowDirection.OUT, label="mpo_bot"),
+        TensorIndex(sym, bond_dw, FlowDirection.OUT, label="w_r"),
+    )
+    return DenseTensor(W, indices)
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
 
-def _trivial_left_env(D_w: int, dtype: Any = jnp.float32) -> DenseTensor:
+def _trivial_left_env(D_w: int, dtype: Any = jnp.float64) -> DenseTensor:
     """Trivial (1, D_w, 1) left environment for iDMRG."""
     sym = U1Symmetry()
     bond_mps = np.zeros(1, dtype=np.int32)
@@ -161,7 +270,7 @@ def _trivial_left_env(D_w: int, dtype: Any = jnp.float32) -> DenseTensor:
     return DenseTensor(data, indices)
 
 
-def _trivial_right_env(D_w: int, dtype: Any = jnp.float32) -> DenseTensor:
+def _trivial_right_env(D_w: int, dtype: Any = jnp.float64) -> DenseTensor:
     """Trivial (1, D_w, 1) right environment for iDMRG."""
     sym = U1Symmetry()
     bond_mps = np.zeros(1, dtype=np.int32)
@@ -281,7 +390,7 @@ def idmrg(
     bulk_mpo: DenseTensor,
     config: iDMRGConfig | None = None,
     d: int = 2,
-    dtype: Any = jnp.float32,
+    dtype: Any = jnp.float64,
 ) -> iDMRGResult:
     """Run infinite DMRG to find the ground-state energy per site.
 
