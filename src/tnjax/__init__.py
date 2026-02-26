@@ -80,6 +80,10 @@ from tnjax.core.index import FlowDirection, Label, TensorIndex
 from tnjax.core.symmetry import (
     BaseNonAbelianSymmetry,
     BaseSymmetry,
+    BraidingStyle,
+    FermionicU1,
+    FermionParity,
+    ProductSymmetry,
     U1Symmetry,
     ZnSymmetry,
 )
@@ -97,6 +101,10 @@ __all__ = [
     "U1Symmetry",
     "ZnSymmetry",
     "BaseNonAbelianSymmetry",
+    "BraidingStyle",
+    "FermionParity",
+    "FermionicU1",
+    "ProductSymmetry",
     # Index
     "FlowDirection",
     "Label",
