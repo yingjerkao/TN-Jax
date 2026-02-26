@@ -36,6 +36,9 @@ htmlcov/
 # Type checking
 .mypy_cache/
 
+# Claude Code
+.claude/settings.local.json
+
 # IDEs
 .idea/
 .vscode/
