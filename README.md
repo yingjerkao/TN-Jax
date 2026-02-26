@@ -15,6 +15,7 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 - **Quasiparticle excitations** — iPEPS excitation spectra at arbitrary Brillouin-zone momenta (Ponsioen et al. 2022)
 - **Block-sparse SVD and QR** — native symmetry-aware decompositions for `SymmetricTensor`
 - **Extensible symmetry system** — non-Abelian symmetry interface for future SU(2) support
+- **Benchmark suite** — CLI-driven performance benchmarks for all algorithms across CPU, CUDA, TPU, and Metal backends
 
 ## Installation
 
@@ -268,6 +269,34 @@ z3 = ZnSymmetry(3)
 print(z3.fuse(np.array([1, 2], dtype=np.int32),
               np.array([2, 2], dtype=np.int32)))  # [0, 1]
 ```
+
+## Benchmarks
+
+A CLI-driven benchmark suite measures wall-clock performance of every algorithm
+across hardware backends.
+
+```bash
+# Quick smoke test (TRG, small size, 1 trial)
+python -m benchmarks.run --backend cpu --algorithm trg --size small --trials 1
+
+# Full CPU baseline
+python -m benchmarks.run --backend cpu -o benchmarks/results/cpu_baseline.json
+
+# GPU comparison
+python -m benchmarks.run --backend cuda -o benchmarks/results/cuda.json
+
+# Specific algorithms and sizes
+python -m benchmarks.run -b cpu -a dmrg idmrg -s small medium -n 5
+
+# CSV output for analysis
+python -m benchmarks.run -b cpu -a all -s all --csv results.csv
+
+# Show available backends
+python -m benchmarks.run --list-backends
+```
+
+Each run prints a summary table and saves full results (timings, parameters,
+device info) to JSON. See `docs/guide/benchmarks.md` for the complete guide.
 
 ## Development
 

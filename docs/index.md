@@ -41,6 +41,15 @@ guide/algorithms/ad_excitations
 guide/algorithms/auto_mpo
 ```
 
+## Tools
+
+```{toctree}
+:maxdepth: 2
+:caption: Tools
+
+guide/benchmarks
+```
+
 ## Reference
 
 ```{toctree}
