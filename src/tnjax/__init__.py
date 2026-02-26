@@ -4,6 +4,10 @@ Label-based contraction (Cytnx-style):
     Tensor legs carry string or integer labels. Two legs with the same label
     across different tensors are automatically contracted when contract() is called.
 
+.. note::
+    Importing ``tnjax`` enables JAX 64-bit mode (``jax_enable_x64``).
+    All tensors and algorithms default to ``float64``.
+
 Quick start::
 
     import jax
@@ -28,6 +32,10 @@ Quick start::
     result = contract(A, B)   # contracts over shared label "bond"
     print(result.labels())    # ('phys', 'left', 'phys', 'right')
 """
+
+import jax
+
+jax.config.update("jax_enable_x64", True)
 
 from tnjax.algorithms.auto_mpo import (
     AutoMPO,
@@ -54,7 +62,9 @@ from tnjax.algorithms.idmrg import (
 from tnjax.algorithms.ipeps import (
     CTMConfig,
     CTMEnvironment,
+    compute_energy_ctm_2site,
     ctm,
+    ctm_2site,
     ipeps,
     iPEPSConfig,
     optimize_gs_ad,
@@ -152,6 +162,8 @@ __all__ = [
     "CTMEnvironment",
     "ipeps",
     "ctm",
+    "ctm_2site",
+    "compute_energy_ctm_2site",
     "optimize_gs_ad",
     # iPEPS Excitations
     "ExcitationConfig",
