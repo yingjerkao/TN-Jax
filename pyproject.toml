@@ -21,7 +21,6 @@ classifiers = [
 ]
 dependencies = [
     "jax>=0.4.30",
-    "jaxlib>=0.4.30",
     "opt-einsum>=3.3.0",
     "numpy>=1.26",
     "networkx>=3.0",
@@ -30,6 +29,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cuda12 = ["jax[cuda12]>=0.4.30"]
+cuda13 = ["jax[cuda13]>=0.4.30"]
+cuda12-local = ["jax[cuda12-local]>=0.4.30"]
+cuda13-local = ["jax[cuda13-local]>=0.4.30"]
+tpu = ["jax[tpu]>=0.4.30"]
+metal = ["jax-metal>=0.1.1; sys_platform == 'darwin'"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
