@@ -2,6 +2,7 @@
 
 import math
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -65,9 +66,11 @@ class TestBuildBulkMPO:
         assert "mpo_top" in labels
         assert "mpo_bot" in labels
 
-    def test_dtype_default_float64(self):
+    def test_dtype_default(self):
         W = build_bulk_mpo_heisenberg()
-        assert W.todense().dtype == jnp.float64
+        # Default is float64, but JAX truncates to float32 without x64 mode
+        expected = jnp.float64 if jax.config.x64_enabled else jnp.float32
+        assert W.todense().dtype == expected
 
     def test_dtype_explicit_float32(self):
         W = build_bulk_mpo_heisenberg(dtype=jnp.float32)
