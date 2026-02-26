@@ -9,7 +9,7 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 - **opt_einsum integration** — optimal contraction path finding for multi-tensor contractions
 - **Network class** — graph-based tensor network container with contraction caching
 - **`.net` file support** — cytnx-style declarative network topology; parse once, load tensors, contract repeatedly (template pattern)
-- **Algorithms** — DMRG, iDMRG (1D chain & infinite cylinder), TRG, HOTRG, iPEPS (simple update & AD optimization), quasiparticle excitations
+- **Algorithms** — DMRG, iDMRG (1D chain & infinite cylinder), TRG, HOTRG, iPEPS (simple update with 1-site or 2-site unit cell & AD optimization), quasiparticle excitations
 - **AutoMPO** — build Hamiltonian MPOs from symbolic operator descriptions (custom couplings, NNN, arbitrary spin); supports `symmetric=True` for U(1) block-sparse MPOs
 - **AD-based iPEPS optimization** — gradient optimization via implicit differentiation through CTM fixed point (Francuz et al. PRR 7, 013237)
 - **Quasiparticle excitations** — iPEPS excitation spectra at arbitrary Brillouin-zone momenta (Ponsioen et al. 2022)
@@ -235,6 +235,32 @@ mpo = build_auto_mpo(terms, L=L, site_ops=custom_ops)
 mpo_sym = auto.to_mpo(symmetric=True)
 ```
 
+## iPEPS Simple Update (2-site unit cell)
+
+```python
+import jax.numpy as jnp
+from tnjax import iPEPSConfig, CTMConfig, ipeps
+
+# Build a 2-site Heisenberg gate
+Sz = 0.5 * jnp.array([[1.0, 0.0], [0.0, -1.0]])
+Sp = jnp.array([[0.0, 1.0], [0.0, 0.0]])
+Sm = jnp.array([[0.0, 0.0], [1.0, 0.0]])
+gate = jnp.einsum("ij,kl->ikjl", Sz, Sz) \
+     + 0.5 * (jnp.einsum("ij,kl->ikjl", Sp, Sm)
+             + jnp.einsum("ij,kl->ikjl", Sm, Sp))
+
+# 2-site checkerboard iPEPS — captures Neel order
+config = iPEPSConfig(
+    max_bond_dim=2,
+    num_imaginary_steps=200,
+    dt=0.05,
+    ctm=CTMConfig(chi=10, max_iter=40),
+    unit_cell="2site",
+)
+energy, peps, (env_A, env_B) = ipeps(gate, None, config)
+print(f"Energy per site: {energy:.6f}")  # ~ -0.6
+```
+
 ## iPEPS AD Optimization and Excitations
 
 ```python
@@ -286,6 +312,37 @@ z3 = ZnSymmetry(3)
 print(z3.fuse(np.array([1, 2], dtype=np.int32),
               np.array([2, 2], dtype=np.int32)))  # [0, 1]
 ```
+
+## Gotchas
+
+### Float64 precision and `JAX_ENABLE_X64`
+
+TN-Jax defaults to `float64` for all tensors and algorithms. Importing
+`tnjax` automatically calls `jax.config.update("jax_enable_x64", True)`,
+so 64-bit arithmetic is enabled out of the box.
+
+If you import JAX *before* `tnjax` and create arrays in that window, they
+will still be `float32`. To avoid surprises, either import `tnjax` first or
+enable x64 manually:
+
+```python
+import jax
+jax.config.update("jax_enable_x64", True)
+
+import tnjax
+```
+
+### MPO index convention
+
+The MPO W-tensor uses the convention `W[w_l, ket, bra, w_r]` — the two
+middle indices are physical (ket on top, bra on bottom) and the outer
+indices are bond dimensions.
+
+### NumPy >= 2.0 casting
+
+Adding a Python `complex` scalar (even `1+0j`) into a `float64` array
+raises `UFuncOutputCastingError` under NumPy >= 2.0. Use `.real` or an
+explicit `complex128` dtype instead.
 
 ## Benchmarks
 
