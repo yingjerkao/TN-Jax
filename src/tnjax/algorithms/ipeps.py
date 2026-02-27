@@ -581,6 +581,156 @@ def _simple_update_2site_vertical(
     return _simple_update_2site_bond(A, B, lam_h, lam_v, gate, max_bond_dim, lambdas, "vertical")
 
 
+def _simple_update_2site_horizontal(
+    A: jax.Array,
+    B: jax.Array,
+    lam_h: jax.Array,
+    lam_v: jax.Array,
+    gate: jax.Array,
+    max_bond_dim: int,
+    lambdas: dict[str, jax.Array],
+) -> tuple[jax.Array, jax.Array, dict[str, jax.Array]]:
+    """Simple update on the horizontal bond A.r ↔ B.l for a 2-site unit cell.
+
+    Returns (A_new, B_new, lambdas_new).
+    """
+    D_u, D_d, D_l, D_r, d = A.shape
+    eps = 1e-15
+
+    # 1. Absorb outer lambdas onto A: u←lam_v, d←lam_v, l←lam_h
+    A_abs = A * lam_v[:D_u, None, None, None, None]
+    A_abs = A_abs * lam_v[None, :D_d, None, None, None]
+    A_abs = A_abs * lam_h[None, None, :D_l, None, None]
+    # 2. Absorb shared-bond lambda onto A.r
+    A_abs = A_abs * lam_h[None, None, None, :D_r, None]
+
+    # 3. Absorb outer lambdas onto B: u←lam_v, d←lam_v, r←lam_h
+    B_u, B_d, B_l, B_r, _ = B.shape
+    B_abs = B * lam_v[:B_u, None, None, None, None]
+    B_abs = B_abs * lam_v[None, :B_d, None, None, None]
+    B_abs = B_abs * lam_h[None, None, None, :B_r, None]
+
+    # 4. Contract A_abs.r with B_abs.l
+    theta = jnp.einsum("udlrs,UDrRt->udlUDRst", A_abs, B_abs)
+
+    # 5. Apply gate
+    theta = jnp.einsum("udlUDRst,stST->udlUDRST", theta, gate)
+
+    # 6. SVD: group (u,d,l,S) vs (U,D,R,T)
+    left_size = D_u * D_d * D_l * d
+    right_size = B_u * B_d * B_r * d
+    mat = theta.transpose(0, 1, 2, 6, 3, 4, 5, 7).reshape(left_size, right_size)
+
+    U_mat, sigma, Vh_mat = jnp.linalg.svd(mat, full_matrices=False)
+    keep = min(max_bond_dim, len(sigma))
+    U_mat = U_mat[:, :keep]
+    sigma = sigma[:keep]
+    Vh_mat = Vh_mat[:keep, :]
+
+    # 7. New lambda
+    lam_new = sigma / (jnp.max(sigma) + eps)
+
+    # 8. Reconstruct A_new and B_new with sqrt(sigma) absorbed
+    sqrt_sig = jnp.sqrt(sigma + eps)
+    A_left = (U_mat * sqrt_sig[None, :]).reshape(D_u, D_d, D_l, d, keep)
+    A_new = A_left.transpose(0, 1, 2, 4, 3)  # (D_u, D_d, D_l, keep, d)
+
+    B_right = (sqrt_sig[:, None] * Vh_mat).reshape(keep, B_u, B_d, B_r, d)
+    B_new = B_right.transpose(1, 2, 0, 3, 4)  # (B_u, B_d, keep, B_r, d)
+
+    # 9. Remove outer lambdas
+    lam_v_inv = 1.0 / (lam_v + eps)
+    lam_h_inv = 1.0 / (lam_h + eps)
+    A_new = A_new * lam_v_inv[:D_u, None, None, None, None]
+    A_new = A_new * lam_v_inv[None, :D_d, None, None, None]
+    A_new = A_new * lam_h_inv[None, None, :D_l, None, None]
+    A_new = A_new / (jnp.linalg.norm(A_new) + eps)
+
+    B_new = B_new * lam_v_inv[:B_u, None, None, None, None]
+    B_new = B_new * lam_v_inv[None, :B_d, None, None, None]
+    B_new = B_new * lam_h_inv[None, None, None, :B_r, None]
+    B_new = B_new / (jnp.linalg.norm(B_new) + eps)
+
+    lambdas_new = dict(lambdas)
+    lambdas_new["horizontal"] = lam_new
+    return A_new, B_new, lambdas_new
+
+
+def _simple_update_2site_vertical(
+    A: jax.Array,
+    B: jax.Array,
+    lam_h: jax.Array,
+    lam_v: jax.Array,
+    gate: jax.Array,
+    max_bond_dim: int,
+    lambdas: dict[str, jax.Array],
+) -> tuple[jax.Array, jax.Array, dict[str, jax.Array]]:
+    """Simple update on the vertical bond A.d ↔ B.u for a 2-site unit cell.
+
+    Returns (A_new, B_new, lambdas_new).
+    """
+    D_u, D_d, D_l, D_r, d = A.shape
+    eps = 1e-15
+
+    # 1. Absorb outer lambdas onto A: u←lam_v, l←lam_h, r←lam_h
+    A_abs = A * lam_v[:D_u, None, None, None, None]
+    A_abs = A_abs * lam_h[None, None, :D_l, None, None]
+    A_abs = A_abs * lam_h[None, None, None, :D_r, None]
+    # 2. Absorb shared-bond lambda onto A.d
+    A_abs = A_abs * lam_v[None, :D_d, None, None, None]
+
+    # 3. Absorb outer lambdas onto B: d←lam_v, l←lam_h, r←lam_h
+    B_u, B_d, B_l, B_r, _ = B.shape
+    B_abs = B * lam_v[None, :B_d, None, None, None]
+    B_abs = B_abs * lam_h[None, None, :B_l, None, None]
+    B_abs = B_abs * lam_h[None, None, None, :B_r, None]
+
+    # 4. Contract A_abs.d with B_abs.u
+    theta = jnp.einsum("udlrs,dDLRt->ulrDLRst", A_abs, B_abs)
+
+    # 5. Apply gate
+    theta = jnp.einsum("ulrDLRst,stST->ulrDLRST", theta, gate)
+
+    # 6. SVD: group (u,l,r,S) vs (D,L,R,T)
+    left_size = D_u * D_l * D_r * d
+    right_size = B_d * B_l * B_r * d
+    mat = theta.transpose(0, 1, 2, 6, 3, 4, 5, 7).reshape(left_size, right_size)
+
+    U_mat, sigma, Vh_mat = jnp.linalg.svd(mat, full_matrices=False)
+    keep = min(max_bond_dim, len(sigma))
+    U_mat = U_mat[:, :keep]
+    sigma = sigma[:keep]
+    Vh_mat = Vh_mat[:keep, :]
+
+    # 7. New lambda
+    lam_new = sigma / (jnp.max(sigma) + eps)
+
+    # 8. Reconstruct A_new and B_new
+    sqrt_sig = jnp.sqrt(sigma + eps)
+    A_left = (U_mat * sqrt_sig[None, :]).reshape(D_u, D_l, D_r, d, keep)
+    A_new = A_left.transpose(0, 4, 1, 2, 3)  # (D_u, keep, D_l, D_r, d)
+
+    B_right = (sqrt_sig[:, None] * Vh_mat).reshape(keep, B_d, B_l, B_r, d)
+    B_new = B_right.transpose(0, 1, 2, 3, 4)  # (keep, B_d, B_l, B_r, d)
+
+    # 9. Remove outer lambdas
+    lam_v_inv = 1.0 / (lam_v + eps)
+    lam_h_inv = 1.0 / (lam_h + eps)
+    A_new = A_new * lam_v_inv[:D_u, None, None, None, None]
+    A_new = A_new * lam_h_inv[None, None, :D_l, None, None]
+    A_new = A_new * lam_h_inv[None, None, None, :D_r, None]
+    A_new = A_new / (jnp.linalg.norm(A_new) + eps)
+
+    B_new = B_new * lam_v_inv[None, :B_d, None, None, None]
+    B_new = B_new * lam_h_inv[None, None, :B_l, None, None]
+    B_new = B_new * lam_h_inv[None, None, None, :B_r, None]
+    B_new = B_new / (jnp.linalg.norm(B_new) + eps)
+
+    lambdas_new = dict(lambdas)
+    lambdas_new["vertical"] = lam_new
+    return A_new, B_new, lambdas_new
+
+
 def ctm(
     A: jax.Array,
     config: CTMConfig,
