@@ -21,6 +21,8 @@ Lower-level API::
 
 from __future__ import annotations
 
+import functools
+import itertools
 import string
 from collections import Counter
 from collections.abc import Sequence
@@ -142,6 +144,27 @@ def _labels_to_subscripts(
     return subscripts, output_indices
 
 
+# ---------- Dense contraction path cache ----------
+
+@functools.lru_cache(maxsize=256)
+def _cached_contraction_path(
+    subscripts: str,
+    shapes: tuple[tuple[int, ...], ...],
+    optimize: str,
+) -> list[tuple[int, ...]]:
+    """Cache opt_einsum contraction paths by (subscripts, shapes, optimize).
+
+    The path depends only on the subscript string and tensor shapes, not on
+    the actual data.  Caching avoids repeating the O(n!) path search on
+    every contraction call with the same shape signature — a key contributor
+    to DMRG warmup time.
+    """
+    # Build dummy arrays (zeros) just for path planning — never executed on device
+    dummy = [np.empty(s) for s in shapes]
+    _, path_info = opt_einsum.contract_path(subscripts, *dummy, optimize=optimize)
+    return path_info.path
+
+
 # ---------- Dense contraction ----------
 
 def _contract_dense(
@@ -152,8 +175,7 @@ def _contract_dense(
 ) -> DenseTensor:
     """Contract dense tensors using opt_einsum with JAX backend.
 
-    Calls opt_einsum.contract_path first (Python-level, no JAX tracing)
-    then executes the contraction with backend='jax'.
+    Uses a cached contraction path to avoid repeated path planning overhead.
 
     Args:
         tensors:        Sequence of DenseTensor.
@@ -165,13 +187,14 @@ def _contract_dense(
         Contracted DenseTensor.
     """
     arrays = [t.todense() for t in tensors]
+    shapes = tuple(a.shape for a in arrays)
 
-    # Find optimal contraction path (Python-level, pure Python overhead)
-    _, path_info = opt_einsum.contract_path(subscripts, *arrays, optimize=optimize)
+    # Look up cached contraction path (or compute & cache it)
+    path = _cached_contraction_path(subscripts, shapes, optimize)
 
-    # Execute contraction with JAX backend (GPU-compatible)
+    # Execute contraction with cached path and JAX backend (GPU-compatible)
     result = opt_einsum.contract(
-        subscripts, *arrays, optimize=path_info.path, backend="jax"
+        subscripts, *arrays, optimize=path, backend="jax"
     )
 
     return DenseTensor(result, output_indices)
@@ -269,19 +292,19 @@ def _contract_symmetric(
     output_indices: tuple[TensorIndex, ...],
     optimize: str = "auto",
 ) -> SymmetricTensor:
-    """Contract block-sparse symmetric tensors.
+    """Contract block-sparse symmetric tensors using charge-indexed matching.
+
+    Instead of iterating over the full Cartesian product of all input blocks
+    (which is O(product of block counts) and mostly incompatible), this
+    implementation pre-indexes blocks by their contracted-leg charge
+    signatures and iterates only over compatible combinations.
 
     Algorithm:
-    1. Parse the subscript string to identify contracted and free legs per tensor.
-    2. Find all valid output blocks (charge combinations for free legs that
-       satisfy conservation).
-    3. For each output block, find all input block combinations where:
-       - Contracted leg charges match between the two (or more) tensors
-       - Free leg charges match the output block
-    4. Contract those sub-arrays and accumulate into the output block.
-
-    This preserves the block structure throughout: the output tensor is also
-    a SymmetricTensor with only symmetry-allowed sectors stored.
+    1. Parse subscripts to identify contracted and free legs per tensor.
+    2. For each tensor, index blocks by (contracted-leg-charges) signature.
+    3. Find contracted-charge tuples shared across all tensors.
+    4. For each shared tuple, iterate over the (much smaller) product of
+       matching blocks and accumulate into output blocks.
 
     Args:
         tensors:        Sequence of SymmetricTensor with the same symmetry group.
@@ -305,14 +328,12 @@ def _contract_symmetric(
     # Build output_indices list in output_part order
     out_indices_ordered = tuple(char_to_index[c] for c in output_part)
 
-    # Find valid output blocks
-    valid_output_keys = _compute_valid_blocks(out_indices_ordered)
+    # Identify contracted characters (appear in multiple input tensors)
+    char_counts: dict[str, int] = Counter(input_part.replace(",", ""))
+    contracted_chars = {c for c, n in char_counts.items() if n >= 2}
 
-    # For each tensor, build a map: (free leg charges) -> list of blocks
-    # that can contribute to each output block.
-    # We'll compute output blocks by iterating over all input block combinations.
-
-    output_blocks: dict[BlockKey, Any] = {}
+    # Precompute valid output keys as a set for O(1) lookup
+    valid_output_set = set(_compute_valid_blocks(out_indices_ordered))
 
     # Precompute fermionic sign structure (once, outside block loop)
     sym = tensors[0].indices[0].symmetry if tensors and tensors[0].indices else None
@@ -321,77 +342,114 @@ def _contract_symmetric(
     if is_fermionic:
         inversion_pairs = _contraction_inversion_pairs(input_subs, output_part)
 
-    # Iterate over all combinations of blocks from all input tensors
-    tensor_block_lists = [list(t.blocks.items()) for t in tensors]
+    # For each tensor, build an index:
+    #   contracted_charge_sig -> list of (block_key, block_array)
+    # where contracted_charge_sig = tuple of charges on contracted legs
+    # in a canonical order (sorted contracted chars).
+    contracted_chars_sorted = sorted(contracted_chars)
 
-    for block_combo in _cartesian_product(tensor_block_lists):
-        # block_combo: list of (key, array) pairs, one per tensor
-        keys = [bc[0] for bc in block_combo]
-        arrays = [bc[1] for bc in block_combo]
+    tensor_indices_by_sig: list[dict[tuple[int, ...], list[tuple[BlockKey, Any]]]] = []
+    for tensor_i, (tensor, subs) in enumerate(zip(tensors, input_subs)):
+        # Find which positions in this tensor's subscript are contracted
+        contracted_positions = [
+            pos for pos, c in enumerate(subs) if c in contracted_chars
+        ]
+        # Map contracted char -> position in contracted_chars_sorted
+        char_to_contracted_pos = {c: i for i, c in enumerate(contracted_chars_sorted)}
+        # For this tensor, map each contracted char to its position in subs
+        contracted_char_positions = [
+            (char_to_contracted_pos[subs[pos]], pos) for pos in contracted_positions
+        ]
+        # Sort by canonical contracted char order
+        contracted_char_positions.sort(key=lambda x: x[0])
 
-        # Check that contracted legs have matching charges
-        # Build char -> charge mapping for this combination
-        char_to_charge: dict[str, int] = {}
-        compatible = True
-        for tensor_idx, (key, _) in enumerate(zip(keys, tensors)):
-            subs = input_subs[tensor_idx]
-            for char, charge in zip(subs, block_combo[tensor_idx][0]):
-                if char in char_to_charge:
-                    if char_to_charge[char] != int(charge):
-                        compatible = False
-                        break
-                else:
-                    char_to_charge[char] = int(charge)
+        sig_index: dict[tuple[int, ...], list[tuple[BlockKey, Any]]] = {}
+        for key, array in tensor.blocks.items():
+            # Extract charges at contracted leg positions, ordered canonically
+            sig = tuple(int(key[pos]) for _, pos in contracted_char_positions)
+            sig_index.setdefault(sig, []).append((key, array))
+        tensor_indices_by_sig.append(sig_index)
+
+    # Find contracted-charge signatures shared across all tensors
+    if tensor_indices_by_sig:
+        common_sigs = set(tensor_indices_by_sig[0].keys())
+        for idx_map in tensor_indices_by_sig[1:]:
+            common_sigs &= set(idx_map.keys())
+    else:
+        common_sigs = set()
+
+    # Cache for within-block contraction expressions
+    block_expr_cache: dict[tuple[tuple[int, ...], ...], Any] = {}
+
+    output_blocks: dict[BlockKey, Any] = {}
+
+    for sig in common_sigs:
+        # Get matching blocks for each tensor
+        matching_lists = [idx_map[sig] for idx_map in tensor_indices_by_sig]
+
+        # Iterate over the product of matching blocks only
+        for combo in itertools.product(*matching_lists):
+            # combo: tuple of (key, array) pairs, one per tensor
+            keys = [c[0] for c in combo]
+            arrays = [c[1] for c in combo]
+
+            # Build char -> charge mapping
+            char_to_charge: dict[str, int] = {}
+            compatible = True
+            for tensor_i, (key, subs) in enumerate(zip(keys, input_subs)):
+                for char, charge in zip(subs, key):
+                    charge_int = int(charge)
+                    if char in char_to_charge:
+                        if char_to_charge[char] != charge_int:
+                            compatible = False
+                            break
+                    else:
+                        char_to_charge[char] = charge_int
+                if not compatible:
+                    break
+
             if not compatible:
-                break
+                continue
 
-        if not compatible:
-            continue
+            # Determine output block key
+            output_key = tuple(char_to_charge.get(c, 0) for c in output_part)
+            if output_key not in valid_output_set:
+                continue
 
-        # Determine output block key from free leg charges
-        output_key = tuple(char_to_charge.get(c, 0) for c in output_part)
+            # Contract using cached expression or opt_einsum
+            block_shapes = tuple(a.shape for a in arrays)
+            cache_key = (block_shapes,)
+            if cache_key in block_expr_cache:
+                expr = block_expr_cache[cache_key]
+                result_array = expr(*arrays, backend="jax")
+            else:
+                try:
+                    expr = opt_einsum.contract_expression(
+                        subscripts, *block_shapes, optimize=optimize,
+                    )
+                    block_expr_cache[cache_key] = expr
+                    result_array = expr(*arrays, backend="jax")
+                except Exception:
+                    continue
 
-        # Check this output key is valid (should be, but verify)
-        if output_key not in set(valid_output_keys):
-            continue
+            # Apply fermionic sign from leg reordering
+            if is_fermionic and inversion_pairs:
+                sign = 1
+                for ci, cj in inversion_pairs:
+                    pi = int(sym.parity(np.array([char_to_charge[ci]]))[0])
+                    pj = int(sym.parity(np.array([char_to_charge[cj]]))[0])
+                    if pi and pj:
+                        sign = -sign
+                if sign < 0:
+                    result_array = -result_array
 
-        # Contract this block combination using opt_einsum on small arrays
-        try:
-            result_array = opt_einsum.contract(
-                subscripts, *arrays, optimize=optimize, backend="jax"
-            )
-        except Exception:
-            continue
-
-        # Apply fermionic sign from leg reordering
-        if is_fermionic and inversion_pairs:
-            sign = 1
-            for ci, cj in inversion_pairs:
-                pi = int(sym.parity(np.array([char_to_charge[ci]]))[0])
-                pj = int(sym.parity(np.array([char_to_charge[cj]]))[0])
-                if pi and pj:
-                    sign = -sign
-            if sign < 0:
-                result_array = -result_array
-
-        # Accumulate into output block
-        if output_key in output_blocks:
-            output_blocks[output_key] = output_blocks[output_key] + result_array
-        else:
-            output_blocks[output_key] = result_array
+            # Accumulate into output block
+            if output_key in output_blocks:
+                output_blocks[output_key] = output_blocks[output_key] + result_array
+            else:
+                output_blocks[output_key] = result_array
 
     return SymmetricTensor(output_blocks, out_indices_ordered)
-
-
-def _cartesian_product(lists: list[list]) -> list[list]:
-    """Cartesian product of lists of (key, array) pairs."""
-    if not lists:
-        return [[]]
-    result = []
-    for item in lists[0]:
-        for rest in _cartesian_product(lists[1:]):
-            result.append([item] + rest)
-    return result
 
 
 # ---------- Public API ----------

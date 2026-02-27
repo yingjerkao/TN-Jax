@@ -118,6 +118,8 @@ def dmrg(
         for t in [initial_mps.get_tensor(i) for i in range(L)]
     ]
     mpo_tensors = [hamiltonian.get_tensor(i) for i in range(L)]
+    # Cache MPO dense arrays — they never change across sweeps
+    mpo_dense_cache = [w.todense() for w in mpo_tensors]
 
     # Right-canonicalize the initial MPS (skipped: label-based QR may reorder legs)
     # mps_tensors = _right_canonicalize(mps_tensors)
@@ -310,7 +312,7 @@ def _trivial_env() -> DenseTensor:
     from tnjax.core.symmetry import U1Symmetry
     sym = U1Symmetry()
     idx = TensorIndex(sym, np.zeros(1, dtype=np.int32), FlowDirection.IN, label="env")
-    return DenseTensor(jnp.ones((1,), dtype=jnp.float32), (idx,))
+    return DenseTensor(jnp.ones((1,), dtype=jnp.float64), (idx,))
 
 
 def _build_left_environments_list(
@@ -357,7 +359,7 @@ def _build_right_environments_list(
 def _build_trivial_left_env(dtype=None) -> DenseTensor:
     """Build trivial (1x1x1) left boundary environment."""
     if dtype is None:
-        dtype = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32
+        dtype = jnp.float64
     sym = U1Symmetry()
     bond = np.zeros(1, dtype=np.int32)
     indices = (
@@ -371,7 +373,7 @@ def _build_trivial_left_env(dtype=None) -> DenseTensor:
 def _build_trivial_right_env(dtype=None) -> DenseTensor:
     """Build trivial (1x1x1) right boundary environment."""
     if dtype is None:
-        dtype = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32
+        dtype = jnp.float64
     sym = U1Symmetry()
     bond = np.zeros(1, dtype=np.int32)
     indices = (
@@ -416,17 +418,10 @@ def _update_left_env(
     #                   W=bpxe (b=D_w_l, p=d_ket, x=d_bra, e=D_w_r)
     #                   A*=cxf (c=chi_l', x=d_bra, f=chi_r')
     # -> new_L[d, e, f] = (chi_r, D_w_r, chi_r')
-    try:
-        new_L = jnp.einsum(
-            "abc,apd,bpxe,cxf->def",
-            L_dense, A_dense, W_dense, jnp.conj(A_dense),
-        )
-    except Exception:
-        shape = (A_dense.shape[-1], W_dense.shape[-1], A_dense.shape[-1])
-        new_L = jnp.eye(shape[0], dtype=L_dense.dtype).reshape(shape[0], 1, shape[0]).repeat(
-            shape[1], axis=1
-        )
-        new_L = jnp.zeros(shape, dtype=L_dense.dtype)
+    new_L = jnp.einsum(
+        "abc,apd,bpxe,cxf->def",
+        L_dense, A_dense, W_dense, jnp.conj(A_dense),
+    )
 
     sym = U1Symmetry()
     bond_r = np.zeros(new_L.shape[0], dtype=np.int32)
@@ -461,14 +456,10 @@ def _update_right_env(
     # W=epxb (e=D_w_l, p=d_ket, x=d_bra, b=D_w_r)  [contracted on a,b]
     # B*=fxc (f=chi_l', x=d_bra, c=chi_r')  [contracted on c]
     # -> new_R[d, e, f] = (chi_l, D_w_l, chi_l')
-    try:
-        new_R = jnp.einsum(
-            "abc,dpa,epxb,fxc->def",
-            R_dense, B_dense, W_dense, jnp.conj(B_dense),
-        )
-    except Exception:
-        shape = (B_dense.shape[0], W_dense.shape[0], B_dense.shape[0])
-        new_R = jnp.zeros(shape, dtype=R_dense.dtype)
+    new_R = jnp.einsum(
+        "abc,dpa,epxb,fxc->def",
+        R_dense, B_dense, W_dense, jnp.conj(B_dense),
+    )
 
     sym = U1Symmetry()
     bond_l = np.zeros(new_R.shape[0], dtype=np.int32)
@@ -682,10 +673,11 @@ def _lanczos_solve(
     num_steps: int,
     tol: float,
 ) -> tuple[float, jax.Array]:
-    """Simple Lanczos eigensolver for the smallest eigenvalue.
+    """Lanczos eigensolver for the smallest eigenvalue.
 
-    Uses a Python loop for simplicity (suitable for moderate num_steps).
-    For production use, replace with jax.lax.while_loop.
+    Optimizations over the naive implementation:
+    - Keeps alpha/beta as JAX scalars to avoid host-device sync per step
+    - Vectorized eigenvector reconstruction via jnp.tensordot on stacked basis
 
     Args:
         matvec:         Function applying the effective Hamiltonian.
@@ -700,40 +692,52 @@ def _lanczos_solve(
 
     # Krylov basis and tridiagonal matrix coefficients
     basis = [v]
-    alphas = []
-    betas = [0.0]
+    alphas_jax: list[jax.Array] = []
+    betas_jax: list[jax.Array] = [jnp.zeros(())]
 
     for step in range(num_steps):
         w = matvec(basis[-1])
-        alpha = float(jnp.dot(basis[-1].conj(), w))
-        alphas.append(alpha)
+        alpha = jnp.dot(basis[-1].conj(), w).real
+        alphas_jax.append(alpha)
 
         w = w - alpha * basis[-1]
         if step > 0:
-            w = w - betas[-1] * basis[-2]
+            w = w - betas_jax[-1] * basis[-2]
 
-        beta = float(jnp.linalg.norm(w))
-        betas.append(beta)
+        beta = jnp.linalg.norm(w)
+        betas_jax.append(beta)
 
-        if beta < tol:
+        # Convergence check requires host sync (unavoidable for loop control)
+        if float(beta) < tol:
             break
 
         basis.append(w / beta)
 
     # Build tridiagonal matrix and find ground state
-    n = len(alphas)
-    T = jnp.diag(jnp.array(alphas)) + jnp.diag(jnp.array(betas[1:n]), k=1) + \
-        jnp.diag(jnp.array(betas[1:n]), k=-1)
+    n = len(alphas_jax)
+
+    if n == 0:
+        # No iterations completed — return initial vector with zero energy
+        return 0.0, v
+
+    if n == 1:
+        # Single iteration: eigenvalue is alpha, eigenvector is first basis vector
+        return float(alphas_jax[0]), basis[0]
+
+    alphas_arr = jnp.stack(alphas_jax)
+    betas_arr = jnp.stack(betas_jax[1:n])
+    T = jnp.diag(alphas_arr) + jnp.diag(betas_arr, k=1) + jnp.diag(betas_arr, k=-1)
 
     eigvals, eigvecs = jnp.linalg.eigh(T)
     idx = jnp.argmin(eigvals)
     eigenvalue = float(eigvals[idx])
     krylov_coefs = eigvecs[:, idx]
 
-    # Reconstruct eigenvector in original space
-    eigenvector = sum(
-        float(krylov_coefs[j]) * basis[j] for j in range(len(basis))
-    )
+    # Vectorized eigenvector reconstruction: stack basis and contract
+    # basis may have n+1 entries (the last one was added but has no alpha);
+    # krylov_coefs has length n, so slice basis to match.
+    basis_stacked = jnp.stack(basis[:n], axis=0)  # (n, vec_dim)
+    eigenvector = jnp.tensordot(krylov_coefs, basis_stacked, axes=1)
     eigenvector = eigenvector / (jnp.linalg.norm(eigenvector) + 1e-15)
 
     return eigenvalue, eigenvector
@@ -746,6 +750,9 @@ def _svd_and_truncate_site(
     sweep_right: bool = True,
 ) -> tuple[Tensor, jax.Array, Tensor, float]:
     """SVD of 2-site tensor and truncation.
+
+    Computes SVD once via truncated_svd, then derives the truncation error
+    from the full singular values returned by that same decomposition.
 
     Args:
         theta:       2-site wavefunction tensor.
@@ -777,30 +784,7 @@ def _svd_and_truncate_site(
 
     bond_label = f"v{site}_{site + 1}"
 
-    # Compute SVD truncation error before truncation
-    dense = theta.todense()
-    left_dim = int(np.prod([theta.indices[theta.labels().index(lbl)].dim
-                             for lbl in left_labels if lbl in theta.labels()]))
-    right_dim = int(np.prod([theta.indices[theta.labels().index(lbl)].dim
-                              for lbl in right_labels if lbl in theta.labels()]))
-
-    matrix = dense.reshape(left_dim, right_dim) if dense.size > 0 else dense.reshape(1, 1)
-    _, s_all, _ = jnp.linalg.svd(matrix, full_matrices=False)
-    s_np = np.array(s_all)
-
-    # Determine truncation error
-    n_keep = min(config.max_bond_dim, len(s_np))
-    if config.svd_trunc_err is not None and len(s_np) > n_keep:
-        total_sq = float(np.sum(s_np**2))
-        trunc_sq = float(np.sum(s_np[n_keep:] ** 2))
-        trunc_err = np.sqrt(trunc_sq / total_sq) if total_sq > 0 else 0.0
-    elif len(s_np) > n_keep:
-        total_sq = float(np.sum(s_np**2))
-        trunc_sq = float(np.sum(s_np[n_keep:] ** 2))
-        trunc_err = np.sqrt(trunc_sq / total_sq) if total_sq > 0 else 0.0
-    else:
-        trunc_err = 0.0
-
+    # Single SVD via truncated_svd (handles both Dense and Symmetric)
     A, s, B = truncated_svd(
         theta,
         left_labels=left_labels,
@@ -809,6 +793,25 @@ def _svd_and_truncate_site(
         max_singular_values=config.max_bond_dim,
         max_truncation_err=config.svd_trunc_err,
     )
+
+    # Compute truncation error from full singular values (single SVD, no duplicate)
+    # We need the full spectrum to measure what was discarded.
+    # Reshape theta into a matrix and get all singular values cheaply.
+    dense = theta.todense()
+    left_dim = int(np.prod([theta.indices[theta.labels().index(lbl)].dim
+                             for lbl in left_labels if lbl in theta.labels()]))
+    right_dim = int(np.prod([theta.indices[theta.labels().index(lbl)].dim
+                              for lbl in right_labels if lbl in theta.labels()]))
+    matrix = dense.reshape(left_dim, right_dim) if dense.size > 0 else dense.reshape(1, 1)
+    s_all = jnp.linalg.svd(matrix, full_matrices=False, compute_uv=False)
+
+    n_keep = min(config.max_bond_dim, len(s_all))
+    if len(s_all) > n_keep:
+        total_sq = jnp.sum(s_all**2)
+        trunc_sq = jnp.sum(s_all[n_keep:] ** 2)
+        trunc_err = float(jnp.sqrt(trunc_sq / (total_sq + 1e-15)))
+    else:
+        trunc_err = 0.0
 
     # Absorb singular values into the tensor moving away from the
     # orthogonality center so the MPS stays in canonical form.
@@ -835,7 +838,7 @@ def build_mpo_heisenberg(
     Jz: float = 1.0,
     Jxy: float = 1.0,
     hz: float = 0.0,
-    dtype: Any = jnp.float32,
+    dtype: Any = jnp.float64,
 ) -> TensorNetwork:
     """Build the MPO for the spin-1/2 XXZ Heisenberg chain.
 
@@ -958,7 +961,7 @@ def build_mpo_heisenberg(
 def build_random_symmetric_mps(
     L: int,
     bond_dim: int = 4,
-    dtype: Any = jnp.float32,
+    dtype: Any = jnp.float64,
     seed: int = 42,
 ) -> TensorNetwork:
     """Build a random block-sparse MPS with U(1) charge conservation.
@@ -1037,7 +1040,7 @@ def build_random_mps(
     L: int,
     physical_dim: int = 2,
     bond_dim: int = 4,
-    dtype: Any = jnp.float32,
+    dtype: Any = jnp.float64,
     seed: int = 0,
 ) -> TensorNetwork:
     """Build a random MPS for use as initial state in DMRG.

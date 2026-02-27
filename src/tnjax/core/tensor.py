@@ -56,11 +56,11 @@ def _compute_valid_blocks(
 ) -> list[BlockKey]:
     """Find all charge-sector tuples satisfying the symmetry conservation law.
 
-    For each combination of one charge per leg, fuses the flow-adjusted charges
-    via symmetry.fuse_many() and keeps tuples where the result equals
-    symmetry.identity(). Delegating to fuse_many() ensures the symmetry's own
-    group arithmetic (e.g. Zn modular reduction) is applied correctly rather
-    than relying on hardcoded arithmetic in this function.
+    Uses incremental fused-sector propagation: instead of testing all N-leg
+    combinations, builds up partial charge sums one leg at a time, pruning
+    incompatible branches early.  For finite groups (Zn), every intermediate
+    sum is kept.  For infinite groups (U1), the last leg is constrained to
+    exactly cancel the running sum, avoiding enumeration of its charges.
 
     Args:
         indices: Tuple of TensorIndex objects, one per tensor leg.
@@ -79,17 +79,81 @@ def _compute_valid_blocks(
         sorted(set(idx.charges.tolist())) for idx in indices
     ]
 
+    n_legs = len(indices)
+
+    # For infinite symmetries (U1), the last leg's charge is fully determined
+    # by the running sum of the previous legs. We can skip enumeration.
+    is_infinite = sym.n_values() is None
+
+    if n_legs == 1:
+        # Single leg: only identity charge is valid
+        return [(q,) for q in unique_charges_per_leg[0]
+                if int(indices[0].flow) * q == identity]
+
+    # Incremental propagation: partial_combos maps
+    #   running_fused_charge -> list of partial BlockKey tuples
+    # Start with the first leg
+    flow0 = int(indices[0].flow)
+    partial: dict[int, list[tuple[int, ...]]] = {}
+    for q in unique_charges_per_leg[0]:
+        fused = flow0 * q
+        partial.setdefault(fused, []).append((q,))
+
+    # Process legs 1 .. n_legs-2 (all except the last)
+    last_leg_idx = n_legs - 1
+    for leg_i in range(1, last_leg_idx):
+        flow_i = int(indices[leg_i].flow)
+        next_partial: dict[int, list[tuple[int, ...]]] = {}
+        for q in unique_charges_per_leg[leg_i]:
+            effective_q = flow_i * q
+            # For each existing partial sum, fuse with this leg's charge
+            for prev_fused, prev_combos in partial.items():
+                new_fused = int(sym.fuse(
+                    np.array([prev_fused], dtype=np.int32),
+                    np.array([effective_q], dtype=np.int32),
+                )[0])
+                extended = [combo + (q,) for combo in prev_combos]
+                if new_fused in next_partial:
+                    next_partial[new_fused].extend(extended)
+                else:
+                    next_partial[new_fused] = extended
+        partial = next_partial
+
+    # Process the last leg: only keep combos where total fuses to identity
+    flow_last = int(indices[last_leg_idx].flow)
     valid_keys: list[BlockKey] = []
-    for combo in itertools.product(*unique_charges_per_leg):
-        # Apply flow to each charge, then fuse via the symmetry object.
-        # flow=IN(+1) leaves charge unchanged; flow=OUT(-1) negates it before
-        # fusing. fuse_many handles modular arithmetic for Zn internally.
-        effective = [
-            np.array([int(idx.flow) * int(q)], dtype=np.int32)
-            for idx, q in zip(indices, combo)
-        ]
-        if int(sym.fuse_many(effective)[0]) == identity:
-            valid_keys.append(tuple(int(q) for q in combo))
+
+    if is_infinite:
+        # For U1: the required effective charge for the last leg is
+        # the dual of the running sum. Check if that charge exists.
+        last_charge_set = set(unique_charges_per_leg[last_leg_idx])
+        for prev_fused, prev_combos in partial.items():
+            # We need: fuse(prev_fused, flow_last * q_last) == identity
+            # For U1: prev_fused + flow_last * q_last == 0
+            # => q_last = -prev_fused / flow_last
+            needed_effective = int(sym.dual(
+                np.array([prev_fused], dtype=np.int32)
+            )[0])
+            if flow_last == 0:
+                continue
+            # needed_effective = flow_last * q_last => q_last = needed_effective / flow_last
+            # For U1 with flow IN(+1)/OUT(-1): q_last = needed_effective * flow_last
+            q_last = needed_effective * flow_last
+            if q_last in last_charge_set:
+                for combo in prev_combos:
+                    valid_keys.append(combo + (q_last,))
+    else:
+        # For finite groups: enumerate last leg charges
+        for q in unique_charges_per_leg[last_leg_idx]:
+            effective_q = flow_last * q
+            for prev_fused, prev_combos in partial.items():
+                total = int(sym.fuse(
+                    np.array([prev_fused], dtype=np.int32),
+                    np.array([effective_q], dtype=np.int32),
+                )[0])
+                if total == identity:
+                    for combo in prev_combos:
+                        valid_keys.append(combo + (q,))
 
     return valid_keys
 
@@ -418,7 +482,7 @@ class SymmetricTensor(Tensor):
     def zeros(
         cls,
         indices: tuple[TensorIndex, ...],
-        dtype: Any = jnp.float32,
+        dtype: Any = jnp.float64,
     ) -> SymmetricTensor:
         """Create a zero tensor with all valid charge sectors initialized to zero.
 
@@ -442,7 +506,7 @@ class SymmetricTensor(Tensor):
         cls,
         indices: tuple[TensorIndex, ...],
         key: jax.Array,
-        dtype: Any = jnp.float32,
+        dtype: Any = jnp.float64,
         stddev: float = 1.0,
     ) -> SymmetricTensor:
         """Create a random tensor with blocks drawn from N(0, stddev).
@@ -541,7 +605,7 @@ class SymmetricTensor(Tensor):
     @property
     def dtype(self) -> Any:
         if not self._blocks:
-            return jnp.float32
+            return jnp.float64
         return next(iter(self._blocks.values())).dtype
 
     @property

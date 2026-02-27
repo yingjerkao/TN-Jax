@@ -25,6 +25,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tnjax.core import LOG_EPS
 from tnjax.core.index import FlowDirection, TensorIndex
 from tnjax.core.symmetry import U1Symmetry
 from tnjax.core.tensor import DenseTensor, Tensor
@@ -178,8 +179,8 @@ def _trg_step(
 
     # Normalize to prevent exponential growth
     norm = jnp.max(jnp.abs(T_new))
-    log_norm = jnp.log(norm + 1e-300)
-    T_new = T_new / (norm + 1e-300)
+    log_norm = jnp.log(norm + LOG_EPS)
+    T_new = T_new / (norm + LOG_EPS)
 
     return T_new, log_norm
 

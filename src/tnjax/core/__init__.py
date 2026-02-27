@@ -9,6 +9,12 @@ from tnjax.core.symmetry import (
 )
 from tnjax.core.tensor import BlockKey, DenseTensor, SymmetricTensor, Tensor
 
+# Shared epsilon constants used across algorithms to prevent underflow.
+# EPS: general-purpose zero-guard for division and normalization (1e-15).
+# LOG_EPS: safe addend before jnp.log to avoid log(0) = -inf (1e-250).
+EPS = 1e-15
+LOG_EPS = 1e-250
+
 __all__ = [
     "BaseSymmetry",
     "U1Symmetry",
@@ -21,4 +27,6 @@ __all__ = [
     "DenseTensor",
     "SymmetricTensor",
     "BlockKey",
+    "EPS",
+    "LOG_EPS",
 ]
