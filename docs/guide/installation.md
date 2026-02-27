@@ -65,6 +65,25 @@ cd docs && uv run make html
 
 The built site will be in `docs/_build/html/`.
 
+## Float64 precision
+
+TN-Jax defaults to `float64` for all tensors and algorithms. Importing
+`tnjax` automatically enables JAX 64-bit mode via
+`jax.config.update("jax_enable_x64", True)`.
+
+If you import JAX *before* `tnjax` and create arrays in that window, they
+will still be `float32`. To avoid surprises, either import `tnjax` first or
+enable x64 manually:
+
+```python
+import jax
+jax.config.update("jax_enable_x64", True)  # before any array creation
+
+import tnjax  # also calls the same update
+```
+
+See {doc}`gotchas` for more details on float64 behaviour.
+
 ## Verifying the installation
 
 ```python

@@ -129,7 +129,11 @@ def main() -> None:
 
     print(f"\nRunning {len(all_benchmarks)} benchmark(s), {args.trials} trial(s) each...\n")
 
-    # Run benchmarks
+    # Resolve output paths
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_path = args.output or f"benchmarks/results/{backend_name}_{timestamp}.json"
+
+    # Run benchmarks, saving incrementally after each one
     results = []
     for i, bench in enumerate(all_benchmarks, 1):
         label = f"[{i}/{len(all_benchmarks)}] {bench['name']} / {bench['size_label']}"
@@ -149,13 +153,12 @@ def main() -> None:
         else:
             print(f"{result.mean_time_s:.3f}s (min={result.min_time_s:.3f}s)")
         results.append(result)
+        save_results_json(results, json_path, quiet=True)
 
     # Print summary
     print_summary_table(results)
 
-    # Save results
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_path = args.output or f"benchmarks/results/{backend_name}_{timestamp}.json"
+    # Final save (with message)
     save_results_json(results, json_path)
 
     if args.csv:
