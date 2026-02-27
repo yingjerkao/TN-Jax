@@ -118,8 +118,6 @@ def dmrg(
         for t in [initial_mps.get_tensor(i) for i in range(L)]
     ]
     mpo_tensors = [hamiltonian.get_tensor(i) for i in range(L)]
-    # Cache MPO dense arrays — they never change across sweeps
-    mpo_dense_cache = [w.todense() for w in mpo_tensors]
 
     # Right-canonicalize the initial MPS (skipped: label-based QR may reorder legs)
     # mps_tensors = _right_canonicalize(mps_tensors)
