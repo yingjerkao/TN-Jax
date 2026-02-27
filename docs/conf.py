@@ -12,6 +12,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
+    "sphinx.ext.mathjax",
     "sphinx_autodoc_typehints",
     "sphinx_copybutton",
     "myst_parser",
@@ -34,6 +35,8 @@ napoleon_use_rtype = False
 
 # MyST (Markdown support)
 myst_enable_extensions = [
+    "amsmath",
+    "dollarmath",
     "colon_fence",
     "deflist",
 ]

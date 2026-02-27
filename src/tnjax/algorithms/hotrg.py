@@ -27,6 +27,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tnjax.core import LOG_EPS
 from tnjax.core.tensor import DenseTensor, Tensor
 
 
@@ -147,8 +148,8 @@ def _hotrg_step_horizontal(
 
     # Normalize
     norm = jnp.max(jnp.abs(T_new))
-    log_norm = jnp.log(norm + 1e-300)
-    T_new = T_new / (norm + 1e-300)
+    log_norm = jnp.log(norm + LOG_EPS)
+    T_new = T_new / (norm + LOG_EPS)
 
     return T_new, log_norm
 
@@ -200,8 +201,8 @@ def _hotrg_step_vertical(
         T_new = jnp.einsum("la,udlr,rb->udab", U_l2, T_new, U_r2)
 
     norm = jnp.max(jnp.abs(T_new))
-    log_norm = jnp.log(norm + 1e-300)
-    T_new = T_new / (norm + 1e-300)
+    log_norm = jnp.log(norm + LOG_EPS)
+    T_new = T_new / (norm + LOG_EPS)
 
     return T_new, log_norm
 

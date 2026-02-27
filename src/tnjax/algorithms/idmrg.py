@@ -467,7 +467,7 @@ def idmrg(
 
         n_keep = min(config.max_bond_dim, len(s_full))
         if config.svd_trunc_err is not None:
-            total_sq = float(jnp.sum(s_full**2))
+            total_sq = jnp.sum(s_full**2)
             cumul_sq = jnp.cumsum(s_full[::-1] ** 2)[::-1]
             mask = cumul_sq > (config.svd_trunc_err**2 * total_sq)
             n_by_err = max(int(jnp.sum(mask)), 1)

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from tnjax.contraction.contractor import (
+    _cached_contraction_path,
     _labels_to_subscripts,
     contract,
     contract_with_subscripts,
@@ -217,6 +218,62 @@ class TestContractDense:
 
         contract(A, B)
         assert call_count[0] > 0
+
+    def test_path_cache_hits(self, u1, rng):
+        """Second contraction with same shapes should use cached path."""
+        _cached_contraction_path.cache_clear()
+
+        n = 4
+        charges = np.zeros(n, dtype=np.int32)
+        A_data = jax.random.normal(rng, (n, n))
+        A = DenseTensor(A_data, (
+            TensorIndex(u1, charges, FlowDirection.IN, label="i"),
+            TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
+        ))
+        B_data = jax.random.normal(jax.random.PRNGKey(99), (n,))
+        B = DenseTensor(B_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),))
+
+        contract(A, B)
+        info_after_first = _cached_contraction_path.cache_info()
+
+        # Second call with different data but same shapes → cache hit
+        A2_data = jax.random.normal(jax.random.PRNGKey(100), (n, n))
+        A2 = DenseTensor(A2_data, (
+            TensorIndex(u1, charges, FlowDirection.IN, label="i"),
+            TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
+        ))
+        B2_data = jax.random.normal(jax.random.PRNGKey(101), (n,))
+        B2 = DenseTensor(B2_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),))
+
+        contract(A2, B2)
+        info_after_second = _cached_contraction_path.cache_info()
+
+        assert info_after_second.hits > info_after_first.hits
+
+    def test_path_cache_numerical_parity(self, u1, rng):
+        """Cached path must produce identical results to uncached."""
+        _cached_contraction_path.cache_clear()
+
+        n = 5
+        charges = np.zeros(n, dtype=np.int32)
+        A_data = jax.random.normal(rng, (n, n))
+        B_data = jax.random.normal(jax.random.PRNGKey(50), (n, n))
+
+        A = DenseTensor(A_data, (
+            TensorIndex(u1, charges, FlowDirection.IN, label="i"),
+            TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
+        ))
+        B = DenseTensor(B_data, (
+            TensorIndex(u1, charges, FlowDirection.IN, label="j"),
+            TensorIndex(u1, charges, FlowDirection.OUT, label="k"),
+        ))
+
+        # First call (cache miss)
+        result1 = contract(A, B)
+        # Second call (cache hit)
+        result2 = contract(A, B)
+
+        np.testing.assert_array_equal(result1.todense(), result2.todense())
 
 
 # ------------------------------------------------------------------ #
