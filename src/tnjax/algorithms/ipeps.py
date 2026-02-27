@@ -28,6 +28,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tnjax.algorithms.ad_utils import truncated_svd_ad
+from tnjax.core import EPS
 from tnjax.core.index import FlowDirection, TensorIndex
 from tnjax.core.symmetry import U1Symmetry
 from tnjax.core.tensor import DenseTensor
@@ -286,6 +287,123 @@ def _simple_update_3leg(
     return A_new, lambdas_new
 
 
+def _simple_update_bond(
+    A: jax.Array,
+    lam_h: jax.Array,
+    lam_v: jax.Array,
+    gate: jax.Array,
+    max_bond_dim: int,
+    lambdas: dict[str, jax.Array],
+    axis: str,
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    """Simple update on a single bond, parameterized by axis.
+
+    A[u, d, l, r, s]:
+      axis="horizontal": shared bond = r (horizontal lambda)
+      axis="vertical":   shared bond = d (vertical lambda)
+
+    Args:
+        A:             iPEPS site tensor, shape (D_u, D_d, D_l, D_r, d).
+        lam_h:         Horizontal bond lambdas.
+        lam_v:         Vertical bond lambdas.
+        gate:          Trotter gate, shape (d, d, d, d).
+        max_bond_dim:  Maximum bond dimension after SVD.
+        lambdas:       Current lambdas dict.
+        axis:          "horizontal" or "vertical".
+
+    Returns:
+        (A_new, lambdas_new).
+    """
+    D_u, D_d, D_l, D_r, d = A.shape
+    eps = EPS
+
+    if axis == "horizontal":
+        # Absorb outer lambdas onto A (all except shared bond r)
+        A_abs = A * lam_v[:D_u, None, None, None, None]
+        A_abs = A_abs * lam_v[None, :D_d, None, None, None]
+        A_abs = A_abs * lam_h[None, None, :D_l, None, None]
+        # Absorb shared-bond lambda onto A.r
+        A_abs = A_abs * lam_h[None, None, None, :D_r, None]
+
+        # B = A, absorb outer lambdas (all except B.l = shared)
+        B_abs = A * lam_v[:D_u, None, None, None, None]
+        B_abs = B_abs * lam_v[None, :D_d, None, None, None]
+        B_abs = B_abs * lam_h[None, None, None, :D_r, None]
+
+        # Contract A_abs.r with B_abs.l → theta
+        theta = jnp.einsum("udlrs,UDrRt->udlUDRst", A_abs, B_abs)
+        theta = jnp.einsum("udlUDRst,stST->udlUDRST", theta, gate)
+
+        left_size = D_u * D_d * D_l * d
+        right_size = D_u * D_d * D_r * d
+        left_shape = (D_u, D_d, D_l, d)
+        # new bond goes into r slot: transpose to (D_u, D_d, D_l, keep, d)
+        left_perm = (0, 1, 2, 4, 3)
+
+        # Outer lambda removal: u←lam_v, d←lam_v, l←lam_h
+        outer_inv_slices = [
+            (1.0 / (lam_v + eps), 0, D_u),  # axis 0
+            (1.0 / (lam_v + eps), 1, D_d),  # axis 1
+            (1.0 / (lam_h + eps), 2, D_l),  # axis 2
+        ]
+    else:  # vertical
+        # Absorb outer lambdas onto A (all except shared bond d)
+        A_abs = A * lam_v[:D_u, None, None, None, None]
+        A_abs = A_abs * lam_h[None, None, :D_l, None, None]
+        A_abs = A_abs * lam_h[None, None, None, :D_r, None]
+        # Absorb shared-bond lambda onto A.d
+        A_abs = A_abs * lam_v[None, :D_d, None, None, None]
+
+        # B = A, absorb outer lambdas (all except B.u = shared)
+        B_abs = A * lam_v[None, :D_d, None, None, None]
+        B_abs = B_abs * lam_h[None, None, :D_l, None, None]
+        B_abs = B_abs * lam_h[None, None, None, :D_r, None]
+
+        # Contract A_abs.d with B_abs.u → theta
+        theta = jnp.einsum("udlrs,dDLRt->ulrDLRst", A_abs, B_abs)
+        theta = jnp.einsum("ulrDLRst,stST->ulrDLRST", theta, gate)
+
+        left_size = D_u * D_l * D_r * d
+        right_size = D_d * D_l * D_r * d
+        left_shape = (D_u, D_l, D_r, d)
+        # new bond goes into d slot: transpose to (D_u, keep, D_l, D_r, d)
+        left_perm = (0, 4, 1, 2, 3)
+
+        # Outer lambda removal: u←lam_v, l←lam_h, r←lam_h
+        outer_inv_slices = [
+            (1.0 / (lam_v + eps), 0, D_u),  # axis 0
+            (1.0 / (lam_h + eps), 2, D_l),  # axis 2
+            (1.0 / (lam_h + eps), 3, D_r),  # axis 3 (after transpose)
+        ]
+
+    # SVD split
+    mat = theta.transpose(0, 1, 2, 6, 3, 4, 5, 7).reshape(left_size, right_size)
+    U_mat, sigma, Vh_mat = jnp.linalg.svd(mat, full_matrices=False)
+    keep = min(max_bond_dim, len(sigma))
+    U_mat = U_mat[:, :keep]
+    sigma = sigma[:keep]
+
+    # New lambda (normalized)
+    lam_new = sigma / (jnp.max(sigma) + eps)
+
+    # Reconstruct A_new from U_mat
+    sqrt_sig = jnp.sqrt(sigma + eps)
+    A_left = (U_mat * sqrt_sig[None, :]).reshape(*left_shape, keep)
+    A_new = A_left.transpose(left_perm)
+
+    # Remove outer lambdas
+    for inv_lam, ax, dim in outer_inv_slices:
+        shape = [1] * 5
+        shape[ax] = dim
+        A_new = A_new * inv_lam[:dim].reshape(shape)
+
+    A_new = A_new / (jnp.linalg.norm(A_new) + eps)
+
+    lambdas_new = dict(lambdas)
+    lambdas_new[axis] = lam_new
+    return A_new, lambdas_new
+
+
 def _simple_update_horizontal(
     A: jax.Array,
     lam_h: jax.Array,
@@ -294,71 +412,8 @@ def _simple_update_horizontal(
     max_bond_dim: int,
     lambdas: dict[str, jax.Array],
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
-    """Simple update on the horizontal bond (A.r ↔ B.l, B=A by periodicity).
-
-    A[u, d, l, r, s]:
-      - shared bond: r  (horizontal lambda)
-      - outer bonds: u, d (vertical lambda), l (horizontal lambda)
-    """
-    D_u, D_d, D_l, D_r, d = A.shape
-    eps = 1e-15
-
-    # 1. Absorb outer lambdas onto A (all legs except shared bond r)
-    #    u ← lam_v, d ← lam_v, l ← lam_h
-    A_abs = A * lam_v[:D_u, None, None, None, None]   # u
-    A_abs = A_abs * lam_v[None, :D_d, None, None, None]  # d
-    A_abs = A_abs * lam_h[None, None, :D_l, None, None]  # l
-
-    # 2. Absorb shared-bond lambda onto A's right leg
-    A_abs = A_abs * lam_h[None, None, None, :D_r, None]  # r (shared)
-
-    # 3. B = A by periodicity, absorb outer lambdas on B (all except B.l = shared)
-    #    B[u, d, l, r, s]: outer = u(lam_v), d(lam_v), r(lam_h)
-    B_abs = A * lam_v[:D_u, None, None, None, None]
-    B_abs = B_abs * lam_v[None, :D_d, None, None, None]
-    B_abs = B_abs * lam_h[None, None, None, :D_r, None]  # r outer on B
-
-    # 4. Form two-site tensor: contract A_abs.r with B_abs.l
-    #    theta[u, d, l, U, D, R, s, t] = A_abs[u,d,l,r,s] * B_abs[U,D,r,R,t]
-    theta = jnp.einsum("udlrs,UDrRt->udlUDRst", A_abs, B_abs)
-    # shape: (D_u, D_d, D_l, D_u, D_d, D_r, d, d)
-
-    # 5. Apply Trotter gate
-    theta = jnp.einsum("udlUDRst,stST->udlUDRST", theta, gate)
-
-    # 6. SVD split: group (u,d,l,S) vs (U,D,R,T)
-    left_size = D_u * D_d * D_l * d
-    right_size = D_u * D_d * D_r * d
-    mat = theta.transpose(0, 1, 2, 6, 3, 4, 5, 7).reshape(left_size, right_size)
-
-    U_mat, sigma, Vh_mat = jnp.linalg.svd(mat, full_matrices=False)
-    keep = min(max_bond_dim, len(sigma))
-    U_mat = U_mat[:, :keep]
-    sigma = sigma[:keep]
-    Vh_mat = Vh_mat[:keep, :]
-
-    # 7. New lambda (normalized)
-    lam_new = sigma / (jnp.max(sigma) + eps)
-
-    # 8. Reconstruct A_new from U_mat: shape (D_u, D_d, D_l, d, keep)
-    #    Absorb sqrt(sigma) into both sides for symmetry
-    sqrt_sig = jnp.sqrt(sigma + eps)
-    A_left = (U_mat * sqrt_sig[None, :]).reshape(D_u, D_d, D_l, d, keep)
-    A_new = A_left.transpose(0, 1, 2, 4, 3)  # -> (D_u, D_d, D_l, keep, d)
-
-    # 9. Remove outer lambdas (divide back)
-    lam_v_inv = 1.0 / (lam_v + eps)
-    lam_h_inv = 1.0 / (lam_h + eps)
-    A_new = A_new * lam_v_inv[:D_u, None, None, None, None]
-    A_new = A_new * lam_v_inv[None, :D_d, None, None, None]
-    A_new = A_new * lam_h_inv[None, None, :D_l, None, None]
-
-    # Normalize A_new
-    A_new = A_new / (jnp.linalg.norm(A_new) + eps)
-
-    lambdas_new = dict(lambdas)
-    lambdas_new["horizontal"] = lam_new
-    return A_new, lambdas_new
+    """Simple update on the horizontal bond (A.r ↔ B.l, B=A by periodicity)."""
+    return _simple_update_bond(A, lam_h, lam_v, gate, max_bond_dim, lambdas, "horizontal")
 
 
 def _simple_update_vertical(
@@ -369,69 +424,161 @@ def _simple_update_vertical(
     max_bond_dim: int,
     lambdas: dict[str, jax.Array],
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
-    """Simple update on the vertical bond (A.d ↔ B.u, B=A by periodicity).
+    """Simple update on the vertical bond (A.d ↔ B.u, B=A by periodicity)."""
+    return _simple_update_bond(A, lam_h, lam_v, gate, max_bond_dim, lambdas, "vertical")
 
-    A[u, d, l, r, s]:
-      - shared bond: d  (vertical lambda)
-      - outer bonds: u (vertical lambda), l, r (horizontal lambda)
+
+def _simple_update_2site_bond(
+    A: jax.Array,
+    B: jax.Array,
+    lam_h: jax.Array,
+    lam_v: jax.Array,
+    gate: jax.Array,
+    max_bond_dim: int,
+    lambdas: dict[str, jax.Array],
+    axis: str,
+) -> tuple[jax.Array, jax.Array, dict[str, jax.Array]]:
+    """Simple update on a single bond for a 2-site unit cell.
+
+    Args:
+        A, B:          iPEPS site tensors, shape (D_u, D_d, D_l, D_r, d).
+        lam_h, lam_v:  Bond lambdas.
+        gate:          Trotter gate.
+        max_bond_dim:  Maximum bond dimension.
+        lambdas:       Current lambdas dict.
+        axis:          "horizontal" or "vertical".
+
+    Returns:
+        (A_new, B_new, lambdas_new).
     """
     D_u, D_d, D_l, D_r, d = A.shape
-    eps = 1e-15
+    B_u, B_d, B_l, B_r, _ = B.shape
+    eps = EPS
 
-    # 1. Absorb outer lambdas onto A (all legs except shared bond d)
-    A_abs = A * lam_v[:D_u, None, None, None, None]      # u (outer)
-    A_abs = A_abs * lam_h[None, None, :D_l, None, None]   # l
-    A_abs = A_abs * lam_h[None, None, None, :D_r, None]   # r
+    if axis == "horizontal":
+        # A: outer = u(v), d(v), l(h); shared = r(h)
+        A_abs = A * lam_v[:D_u, None, None, None, None]
+        A_abs = A_abs * lam_v[None, :D_d, None, None, None]
+        A_abs = A_abs * lam_h[None, None, :D_l, None, None]
+        A_abs = A_abs * lam_h[None, None, None, :D_r, None]
 
-    # 2. Absorb shared-bond lambda onto A's down leg
-    A_abs = A_abs * lam_v[None, :D_d, None, None, None]   # d (shared)
+        # B: outer = u(v), d(v), r(h); shared = l (from contraction)
+        B_abs = B * lam_v[:B_u, None, None, None, None]
+        B_abs = B_abs * lam_v[None, :B_d, None, None, None]
+        B_abs = B_abs * lam_h[None, None, None, :B_r, None]
 
-    # 3. B = A by periodicity, absorb outer lambdas on B (all except B.u = shared)
-    B_abs = A * lam_v[None, :D_d, None, None, None]       # d outer on B
-    B_abs = B_abs * lam_h[None, None, :D_l, None, None]
-    B_abs = B_abs * lam_h[None, None, None, :D_r, None]
+        theta = jnp.einsum("udlrs,UDrRt->udlUDRst", A_abs, B_abs)
+        theta = jnp.einsum("udlUDRst,stST->udlUDRST", theta, gate)
 
-    # 4. Form two-site tensor: contract A_abs.d with B_abs.u
-    #    theta[u, l, r, D, L, R, s, t] = A_abs[u,d,l,r,s] * B_abs[d,D,L,R,t]
-    theta = jnp.einsum("udlrs,dDLRt->ulrDLRst", A_abs, B_abs)
-    # shape: (D_u, D_l, D_r, D_d, D_l, D_r, d, d)
+        left_size = D_u * D_d * D_l * d
+        right_size = B_u * B_d * B_r * d
+        a_left_shape = (D_u, D_d, D_l, d)
+        b_right_shape = (B_u, B_d, B_r, d)
+        a_perm = (0, 1, 2, 4, 3)    # new bond → r slot
+        b_perm = (1, 2, 0, 3, 4)    # new bond → l slot
+        a_outer_inv = [
+            (1.0 / (lam_v + eps), 0, D_u),
+            (1.0 / (lam_v + eps), 1, D_d),
+            (1.0 / (lam_h + eps), 2, D_l),
+        ]
+        b_outer_inv = [
+            (1.0 / (lam_v + eps), 0, B_u),
+            (1.0 / (lam_v + eps), 1, B_d),
+            (1.0 / (lam_h + eps), 3, B_r),
+        ]
+    else:  # vertical
+        # A: outer = u(v), l(h), r(h); shared = d(v)
+        A_abs = A * lam_v[:D_u, None, None, None, None]
+        A_abs = A_abs * lam_h[None, None, :D_l, None, None]
+        A_abs = A_abs * lam_h[None, None, None, :D_r, None]
+        A_abs = A_abs * lam_v[None, :D_d, None, None, None]
 
-    # 5. Apply Trotter gate
-    theta = jnp.einsum("ulrDLRst,stST->ulrDLRST", theta, gate)
+        # B: outer = d(v), l(h), r(h); shared = u (from contraction)
+        B_abs = B * lam_v[None, :B_d, None, None, None]
+        B_abs = B_abs * lam_h[None, None, :B_l, None, None]
+        B_abs = B_abs * lam_h[None, None, None, :B_r, None]
 
-    # 6. SVD split: group (u,l,r,S) vs (D,L,R,T)
-    left_size = D_u * D_l * D_r * d
-    right_size = D_d * D_l * D_r * d
+        theta = jnp.einsum("udlrs,dDLRt->ulrDLRst", A_abs, B_abs)
+        theta = jnp.einsum("ulrDLRst,stST->ulrDLRST", theta, gate)
+
+        left_size = D_u * D_l * D_r * d
+        right_size = B_d * B_l * B_r * d
+        a_left_shape = (D_u, D_l, D_r, d)
+        b_right_shape = (B_d, B_l, B_r, d)
+        a_perm = (0, 4, 1, 2, 3)    # new bond → d slot
+        b_perm = (0, 1, 2, 3, 4)    # new bond → u slot
+        a_outer_inv = [
+            (1.0 / (lam_v + eps), 0, D_u),
+            (1.0 / (lam_h + eps), 2, D_l),
+            (1.0 / (lam_h + eps), 3, D_r),
+        ]
+        b_outer_inv = [
+            (1.0 / (lam_v + eps), 1, B_d),
+            (1.0 / (lam_h + eps), 2, B_l),
+            (1.0 / (lam_h + eps), 3, B_r),
+        ]
+
+    # SVD
     mat = theta.transpose(0, 1, 2, 6, 3, 4, 5, 7).reshape(left_size, right_size)
-
     U_mat, sigma, Vh_mat = jnp.linalg.svd(mat, full_matrices=False)
     keep = min(max_bond_dim, len(sigma))
     U_mat = U_mat[:, :keep]
     sigma = sigma[:keep]
     Vh_mat = Vh_mat[:keep, :]
 
-    # 7. New lambda (normalized)
     lam_new = sigma / (jnp.max(sigma) + eps)
-
-    # 8. Reconstruct A_new from U_mat: shape (D_u, D_l, D_r, d, keep)
     sqrt_sig = jnp.sqrt(sigma + eps)
-    A_left = (U_mat * sqrt_sig[None, :]).reshape(D_u, D_l, D_r, d, keep)
-    # Transpose to (D_u, keep, D_l, D_r, d) — keep goes into the "d" (down) slot
-    A_new = A_left.transpose(0, 4, 1, 2, 3)  # -> (D_u, keep, D_l, D_r, d)
 
-    # 9. Remove outer lambdas (divide back)
-    lam_v_inv = 1.0 / (lam_v + eps)
-    lam_h_inv = 1.0 / (lam_h + eps)
-    A_new = A_new * lam_v_inv[:D_u, None, None, None, None]
-    A_new = A_new * lam_h_inv[None, None, :D_l, None, None]
-    A_new = A_new * lam_h_inv[None, None, None, :D_r, None]
+    # Reconstruct A_new
+    A_left = (U_mat * sqrt_sig[None, :]).reshape(*a_left_shape, keep)
+    A_new = A_left.transpose(a_perm)
 
-    # Normalize A_new
+    # Reconstruct B_new
+    B_right = (sqrt_sig[:, None] * Vh_mat).reshape(keep, *b_right_shape)
+    B_new = B_right.transpose(b_perm)
+
+    # Remove outer lambdas
+    for inv_lam, ax, dim in a_outer_inv:
+        shape = [1] * 5
+        shape[ax] = dim
+        A_new = A_new * inv_lam[:dim].reshape(shape)
     A_new = A_new / (jnp.linalg.norm(A_new) + eps)
 
+    for inv_lam, ax, dim in b_outer_inv:
+        shape = [1] * 5
+        shape[ax] = dim
+        B_new = B_new * inv_lam[:dim].reshape(shape)
+    B_new = B_new / (jnp.linalg.norm(B_new) + eps)
+
     lambdas_new = dict(lambdas)
-    lambdas_new["vertical"] = lam_new
-    return A_new, lambdas_new
+    lambdas_new[axis] = lam_new
+    return A_new, B_new, lambdas_new
+
+
+def _simple_update_2site_horizontal(
+    A: jax.Array,
+    B: jax.Array,
+    lam_h: jax.Array,
+    lam_v: jax.Array,
+    gate: jax.Array,
+    max_bond_dim: int,
+    lambdas: dict[str, jax.Array],
+) -> tuple[jax.Array, jax.Array, dict[str, jax.Array]]:
+    """Simple update on the horizontal bond A.r ↔ B.l for a 2-site unit cell."""
+    return _simple_update_2site_bond(A, B, lam_h, lam_v, gate, max_bond_dim, lambdas, "horizontal")
+
+
+def _simple_update_2site_vertical(
+    A: jax.Array,
+    B: jax.Array,
+    lam_h: jax.Array,
+    lam_v: jax.Array,
+    gate: jax.Array,
+    max_bond_dim: int,
+    lambdas: dict[str, jax.Array],
+) -> tuple[jax.Array, jax.Array, dict[str, jax.Array]]:
+    """Simple update on the vertical bond A.d ↔ B.u for a 2-site unit cell."""
+    return _simple_update_2site_bond(A, B, lam_h, lam_v, gate, max_bond_dim, lambdas, "vertical")
 
 
 def _simple_update_2site_horizontal(
@@ -904,7 +1051,7 @@ def _renormalize_env(env: CTMEnvironment) -> CTMEnvironment:
     """Normalize environment tensors to prevent exponential growth."""
     def normalize(x: jax.Array) -> jax.Array:
         norm = jnp.max(jnp.abs(x))
-        return x / (norm + 1e-300)
+        return x / (norm + EPS)
 
     return CTMEnvironment(
         C1=normalize(env.C1),
