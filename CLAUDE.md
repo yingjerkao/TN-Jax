@@ -19,6 +19,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Known Gotchas
 
+- **Float64 default / JAX x64**: All tensors and algorithms default to `float64`. Importing `tnjax` enables x64 automatically via `jax.config.update("jax_enable_x64", True)`. CI tests that import `tnjax` will have x64 enabled. Tests that use JAX directly without importing `tnjax` should use `jax.config.x64_enabled` to pick the expected dtype.
 - **MPO index convention**: `W[w_l, ket, bra, w_r]`. The DMRG effective-Hamiltonian matvec einsum is `"abc,apqd,bpse,eqtf,dfg->cstg"` where `p,q` are ket and `s,t` are bra physical indices.
 - **NumPy ≥2.0**: Adding a Python `complex` scalar (even `1+0j`) into a `float64` array raises `UFuncOutputCastingError`. Extract `.real` or use `complex128` dtype explicitly.
-- **Local tests**: `uv run pytest` may fail on macOS x86_64 if jaxlib has no wheel. JAX x64 is not enabled locally — `float64` silently truncates to `float32`.
+- **Local tests**: `uv run pytest` may fail on macOS x86_64 if jaxlib has no wheel. CI does not enable JAX x64, so default `float64` is truncated to `float32` at runtime.
+- **Odd-circumference cylinders**: `build_bulk_mpo_heisenberg_cylinder` only accepts even `Ly`. Odd circumference frustrates AFM order on the square lattice.

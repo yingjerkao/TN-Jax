@@ -8,18 +8,18 @@ This lets us use the standard ``idmrg()`` function without modification.
 
 Usage::
 
-    JAX_ENABLE_X64=1 uv run python examples/heisenberg_infinite_cylinder.py
+    uv run python examples/heisenberg_infinite_cylinder.py
 """
 
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("JAX_ENABLE_X64", "1")
-
 import time
 
+import jax
 import numpy as np
+
+jax.config.update("jax_enable_x64", True)
+
 
 from tnjax import build_bulk_mpo_heisenberg_cylinder, iDMRGConfig, idmrg
 

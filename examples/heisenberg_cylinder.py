@@ -26,13 +26,12 @@ Usage::
 
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("JAX_ENABLE_X64", "1")
-
 import time
 
+import jax
 import numpy as np
+
+jax.config.update("jax_enable_x64", True)
 
 from tnjax import AutoMPO, DMRGConfig, build_random_mps, dmrg
 

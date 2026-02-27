@@ -325,7 +325,7 @@ def _w_matrices_to_symmetric_mpo(
     d: int,
     phys_charges: np.ndarray,
     bond_charges: list[np.ndarray],
-    dtype: Any = jnp.float32,
+    dtype: Any = jnp.float64,
     name: str = "AutoMPO_sym",
 ) -> TensorNetwork:
     """Wrap W-matrices into a TensorNetwork of SymmetricTensor nodes.
@@ -391,7 +391,7 @@ def _w_matrices_to_symmetric_mpo(
 def _w_matrices_to_mpo(
     w_matrices: list[np.ndarray],
     d: int,
-    dtype: Any = jnp.float32,
+    dtype: Any = jnp.float64,
     name: str = "AutoMPO",
 ) -> TensorNetwork:
     """Wrap a list of W-matrices into a TensorNetwork of DenseTensor nodes.
@@ -561,7 +561,7 @@ class AutoMPO:
         self,
         compress: bool = False,
         compress_tol: float = 1e-12,
-        dtype: Any = jnp.float32,
+        dtype: Any = jnp.float64,
         symmetric: bool = False,
         phys_charges: np.ndarray | None = None,
     ) -> TensorNetwork:
@@ -650,7 +650,7 @@ def build_auto_mpo(
     site_ops: dict[str, np.ndarray] | None = None,
     compress: bool = False,
     compress_tol: float = 1e-12,
-    dtype: Any = jnp.float32,
+    dtype: Any = jnp.float64,
     symmetric: bool = False,
     phys_charges: np.ndarray | None = None,
 ) -> TensorNetwork:
