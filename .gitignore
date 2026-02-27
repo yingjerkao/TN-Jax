@@ -59,5 +59,8 @@ MANIFEST
 # Logs
 *.log
 
+# Benchmark results
+benchmarks/results/
+
 # Docs
 docs/_build/
