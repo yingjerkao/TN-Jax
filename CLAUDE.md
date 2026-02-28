@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Always open a PR instead of pushing directly to `main`.
 - Merge PRs with `gh pr merge <number> --squash --delete-branch --auto` so CI must pass first.
-- `main` has branch protection: `Tests (Python 3.11)` and `Tests (Python 3.12)` must pass.
+- `main` has branch protection: `Tests (Python 3.11)`, `Tests (Python 3.12)`, and `Tests (macOS, Python 3.12)` must pass.
 - Branch protection requires the PR branch to be up-to-date with `main`. If behind, merge main into the branch (`git merge origin/main`) rather than rebasing — rebase can get stuck on `--continue`.
+- **Pytest markers**: Tests are auto-marked by file name (`core`, `algorithm`, `slow`) via `conftest.py`. CI required checks run only `pytest -m core`; full suite runs on push to main or with the `run-full-tests` PR label. Locally: `uv run pytest -m core` (fast), `uv run pytest -m "not slow"` (skip expensive), `uv run pytest` (all).
 
 
 

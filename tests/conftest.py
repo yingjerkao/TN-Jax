@@ -10,6 +10,35 @@ from tnjax.core.symmetry import U1Symmetry, ZnSymmetry
 from tnjax.core.tensor import DenseTensor, SymmetricTensor
 
 # ------------------------------------------------------------------ #
+# Auto-apply markers based on test file name                           #
+# ------------------------------------------------------------------ #
+
+_FILE_MARKERS = {
+    "test_tensor.py": "core",
+    "test_index.py": "core",
+    "test_symmetry.py": "core",
+    "test_contraction.py": "core",
+    "test_network.py": "core",
+    "test_netfile.py": "core",
+    "test_fermionic.py": "core",
+    "test_dmrg.py": "algorithm",
+    "test_idmrg.py": "algorithm",
+    "test_trg.py": "algorithm",
+    "test_hotrg.py": "algorithm",
+    "test_ipeps.py": "algorithm",
+    "test_auto_mpo.py": "algorithm",
+    "test_ad_utils.py": "algorithm",
+    "test_ipeps_excitations.py": "slow",
+}
+
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        filename = item.path.name
+        if filename in _FILE_MARKERS:
+            item.add_marker(getattr(pytest.mark, _FILE_MARKERS[filename]))
+
+# ------------------------------------------------------------------ #
 # Symmetry fixtures                                                    #
 # ------------------------------------------------------------------ #
 
