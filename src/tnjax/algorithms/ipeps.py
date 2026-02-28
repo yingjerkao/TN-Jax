@@ -27,7 +27,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tnjax.algorithms.ad_utils import truncated_svd_ad
 from tnjax.core import EPS
 from tnjax.core.index import FlowDirection, TensorIndex
 from tnjax.core.symmetry import U1Symmetry
@@ -117,7 +116,9 @@ def ipeps(
     hamiltonian_gate: jax.Array,
     initial_peps: TensorNetwork | jax.Array | tuple[jax.Array, jax.Array] | None,
     config: iPEPSConfig,
-) -> tuple[float, TensorNetwork, CTMEnvironment | tuple[CTMEnvironment, CTMEnvironment]]:
+) -> tuple[
+    float, TensorNetwork, CTMEnvironment | tuple[CTMEnvironment, CTMEnvironment]
+]:
     """Run iPEPS simple update + CTM for a 2D quantum lattice model.
 
     Algorithm overview:
@@ -181,7 +182,9 @@ def ipeps(
     # Ensure Hermitian
     gate_matrix = 0.5 * (gate_matrix + gate_matrix.conj().T)
     eigvals, eigvecs = jnp.linalg.eigh(gate_matrix)
-    trotter_gate_matrix = eigvecs @ jnp.diag(jnp.exp(-config.dt * eigvals)) @ eigvecs.conj().T
+    trotter_gate_matrix = (
+        eigvecs @ jnp.diag(jnp.exp(-config.dt * eigvals)) @ eigvecs.conj().T
+    )
     trotter_gate = trotter_gate_matrix.reshape(d, d, d, d)
 
     # Initialize lambda matrices (identity = no environment approximation)
@@ -195,7 +198,12 @@ def ipeps(
     for step in range(config.num_imaginary_steps):
         bond = "horizontal" if step % 2 == 0 else "vertical"
         A_dense, lambdas = _simple_update_1x1(
-            A_dense, A_dense, lambdas, trotter_gate, config.max_bond_dim, bond=bond,
+            A_dense,
+            A_dense,
+            lambdas,
+            trotter_gate,
+            config.max_bond_dim,
+            bond=bond,
         )
 
     # Reconstruct PEPS tensor network with optimized tensor
@@ -263,9 +271,11 @@ def _simple_update_3leg(
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
     """Simple update for the legacy 3-leg (D_l, D_r, d) tensor path."""
     D_l, D_r, phys = A.shape
-    lam_r = lambdas.get("horizontal", lambdas.get("right", jnp.ones(min(D_r, max_bond_dim))))
+    lam_r = lambdas.get(
+        "horizontal", lambdas.get("right", jnp.ones(min(D_r, max_bond_dim)))
+    )
 
-    A_abs = A * lam_r[None, :min(D_r, len(lam_r)), None]
+    A_abs = A * lam_r[None, : min(D_r, len(lam_r)), None]
     theta = jnp.einsum("lrs,Lrs,sstT->lLtT", A_abs, A, gate.reshape(phys, phys, d, d))
 
     theta_mat = theta.reshape(D_l * D_l, d * d)
@@ -276,10 +286,12 @@ def _simple_update_3leg(
     s_new = s[:n_keep]
 
     s_norm = s_new / (jnp.max(s_new) + 1e-15)
-    lam_inv = 1.0 / (lam_r[:min(D_r, len(lam_r))] + 1e-15)
+    lam_inv = 1.0 / (lam_r[: min(D_r, len(lam_r))] + 1e-15)
 
     A_new_mat = U.reshape(D_l, D_l, n_keep)[:, 0, :]
-    A_new = (A_new_mat * lam_inv[None, :min(D_l, len(lam_inv))]).reshape(D_l, n_keep, d)
+    A_new = (A_new_mat * lam_inv[None, : min(D_l, len(lam_inv))]).reshape(
+        D_l, n_keep, d
+    )
 
     lambdas_new = dict(lambdas)
     lambdas_new["horizontal"] = s_norm
@@ -413,7 +425,9 @@ def _simple_update_horizontal(
     lambdas: dict[str, jax.Array],
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
     """Simple update on the horizontal bond (A.r ↔ B.l, B=A by periodicity)."""
-    return _simple_update_bond(A, lam_h, lam_v, gate, max_bond_dim, lambdas, "horizontal")
+    return _simple_update_bond(
+        A, lam_h, lam_v, gate, max_bond_dim, lambdas, "horizontal"
+    )
 
 
 def _simple_update_vertical(
@@ -474,8 +488,8 @@ def _simple_update_2site_bond(
         right_size = B_u * B_d * B_r * d
         a_left_shape = (D_u, D_d, D_l, d)
         b_right_shape = (B_u, B_d, B_r, d)
-        a_perm = (0, 1, 2, 4, 3)    # new bond → r slot
-        b_perm = (1, 2, 0, 3, 4)    # new bond → l slot
+        a_perm = (0, 1, 2, 4, 3)  # new bond → r slot
+        b_perm = (1, 2, 0, 3, 4)  # new bond → l slot
         a_outer_inv = [
             (1.0 / (lam_v + eps), 0, D_u),
             (1.0 / (lam_v + eps), 1, D_d),
@@ -505,8 +519,8 @@ def _simple_update_2site_bond(
         right_size = B_d * B_l * B_r * d
         a_left_shape = (D_u, D_l, D_r, d)
         b_right_shape = (B_d, B_l, B_r, d)
-        a_perm = (0, 4, 1, 2, 3)    # new bond → d slot
-        b_perm = (0, 1, 2, 3, 4)    # new bond → u slot
+        a_perm = (0, 4, 1, 2, 3)  # new bond → d slot
+        b_perm = (0, 1, 2, 3, 4)  # new bond → u slot
         a_outer_inv = [
             (1.0 / (lam_v + eps), 0, D_u),
             (1.0 / (lam_h + eps), 2, D_l),
@@ -552,182 +566,6 @@ def _simple_update_2site_bond(
 
     lambdas_new = dict(lambdas)
     lambdas_new[axis] = lam_new
-    return A_new, B_new, lambdas_new
-
-
-def _simple_update_2site_horizontal(
-    A: jax.Array,
-    B: jax.Array,
-    lam_h: jax.Array,
-    lam_v: jax.Array,
-    gate: jax.Array,
-    max_bond_dim: int,
-    lambdas: dict[str, jax.Array],
-) -> tuple[jax.Array, jax.Array, dict[str, jax.Array]]:
-    """Simple update on the horizontal bond A.r ↔ B.l for a 2-site unit cell."""
-    return _simple_update_2site_bond(A, B, lam_h, lam_v, gate, max_bond_dim, lambdas, "horizontal")
-
-
-def _simple_update_2site_vertical(
-    A: jax.Array,
-    B: jax.Array,
-    lam_h: jax.Array,
-    lam_v: jax.Array,
-    gate: jax.Array,
-    max_bond_dim: int,
-    lambdas: dict[str, jax.Array],
-) -> tuple[jax.Array, jax.Array, dict[str, jax.Array]]:
-    """Simple update on the vertical bond A.d ↔ B.u for a 2-site unit cell."""
-    return _simple_update_2site_bond(A, B, lam_h, lam_v, gate, max_bond_dim, lambdas, "vertical")
-
-
-def _simple_update_2site_horizontal(
-    A: jax.Array,
-    B: jax.Array,
-    lam_h: jax.Array,
-    lam_v: jax.Array,
-    gate: jax.Array,
-    max_bond_dim: int,
-    lambdas: dict[str, jax.Array],
-) -> tuple[jax.Array, jax.Array, dict[str, jax.Array]]:
-    """Simple update on the horizontal bond A.r ↔ B.l for a 2-site unit cell.
-
-    Returns (A_new, B_new, lambdas_new).
-    """
-    D_u, D_d, D_l, D_r, d = A.shape
-    eps = 1e-15
-
-    # 1. Absorb outer lambdas onto A: u←lam_v, d←lam_v, l←lam_h
-    A_abs = A * lam_v[:D_u, None, None, None, None]
-    A_abs = A_abs * lam_v[None, :D_d, None, None, None]
-    A_abs = A_abs * lam_h[None, None, :D_l, None, None]
-    # 2. Absorb shared-bond lambda onto A.r
-    A_abs = A_abs * lam_h[None, None, None, :D_r, None]
-
-    # 3. Absorb outer lambdas onto B: u←lam_v, d←lam_v, r←lam_h
-    B_u, B_d, B_l, B_r, _ = B.shape
-    B_abs = B * lam_v[:B_u, None, None, None, None]
-    B_abs = B_abs * lam_v[None, :B_d, None, None, None]
-    B_abs = B_abs * lam_h[None, None, None, :B_r, None]
-
-    # 4. Contract A_abs.r with B_abs.l
-    theta = jnp.einsum("udlrs,UDrRt->udlUDRst", A_abs, B_abs)
-
-    # 5. Apply gate
-    theta = jnp.einsum("udlUDRst,stST->udlUDRST", theta, gate)
-
-    # 6. SVD: group (u,d,l,S) vs (U,D,R,T)
-    left_size = D_u * D_d * D_l * d
-    right_size = B_u * B_d * B_r * d
-    mat = theta.transpose(0, 1, 2, 6, 3, 4, 5, 7).reshape(left_size, right_size)
-
-    U_mat, sigma, Vh_mat = jnp.linalg.svd(mat, full_matrices=False)
-    keep = min(max_bond_dim, len(sigma))
-    U_mat = U_mat[:, :keep]
-    sigma = sigma[:keep]
-    Vh_mat = Vh_mat[:keep, :]
-
-    # 7. New lambda
-    lam_new = sigma / (jnp.max(sigma) + eps)
-
-    # 8. Reconstruct A_new and B_new with sqrt(sigma) absorbed
-    sqrt_sig = jnp.sqrt(sigma + eps)
-    A_left = (U_mat * sqrt_sig[None, :]).reshape(D_u, D_d, D_l, d, keep)
-    A_new = A_left.transpose(0, 1, 2, 4, 3)  # (D_u, D_d, D_l, keep, d)
-
-    B_right = (sqrt_sig[:, None] * Vh_mat).reshape(keep, B_u, B_d, B_r, d)
-    B_new = B_right.transpose(1, 2, 0, 3, 4)  # (B_u, B_d, keep, B_r, d)
-
-    # 9. Remove outer lambdas
-    lam_v_inv = 1.0 / (lam_v + eps)
-    lam_h_inv = 1.0 / (lam_h + eps)
-    A_new = A_new * lam_v_inv[:D_u, None, None, None, None]
-    A_new = A_new * lam_v_inv[None, :D_d, None, None, None]
-    A_new = A_new * lam_h_inv[None, None, :D_l, None, None]
-    A_new = A_new / (jnp.linalg.norm(A_new) + eps)
-
-    B_new = B_new * lam_v_inv[:B_u, None, None, None, None]
-    B_new = B_new * lam_v_inv[None, :B_d, None, None, None]
-    B_new = B_new * lam_h_inv[None, None, None, :B_r, None]
-    B_new = B_new / (jnp.linalg.norm(B_new) + eps)
-
-    lambdas_new = dict(lambdas)
-    lambdas_new["horizontal"] = lam_new
-    return A_new, B_new, lambdas_new
-
-
-def _simple_update_2site_vertical(
-    A: jax.Array,
-    B: jax.Array,
-    lam_h: jax.Array,
-    lam_v: jax.Array,
-    gate: jax.Array,
-    max_bond_dim: int,
-    lambdas: dict[str, jax.Array],
-) -> tuple[jax.Array, jax.Array, dict[str, jax.Array]]:
-    """Simple update on the vertical bond A.d ↔ B.u for a 2-site unit cell.
-
-    Returns (A_new, B_new, lambdas_new).
-    """
-    D_u, D_d, D_l, D_r, d = A.shape
-    eps = 1e-15
-
-    # 1. Absorb outer lambdas onto A: u←lam_v, l←lam_h, r←lam_h
-    A_abs = A * lam_v[:D_u, None, None, None, None]
-    A_abs = A_abs * lam_h[None, None, :D_l, None, None]
-    A_abs = A_abs * lam_h[None, None, None, :D_r, None]
-    # 2. Absorb shared-bond lambda onto A.d
-    A_abs = A_abs * lam_v[None, :D_d, None, None, None]
-
-    # 3. Absorb outer lambdas onto B: d←lam_v, l←lam_h, r←lam_h
-    B_u, B_d, B_l, B_r, _ = B.shape
-    B_abs = B * lam_v[None, :B_d, None, None, None]
-    B_abs = B_abs * lam_h[None, None, :B_l, None, None]
-    B_abs = B_abs * lam_h[None, None, None, :B_r, None]
-
-    # 4. Contract A_abs.d with B_abs.u
-    theta = jnp.einsum("udlrs,dDLRt->ulrDLRst", A_abs, B_abs)
-
-    # 5. Apply gate
-    theta = jnp.einsum("ulrDLRst,stST->ulrDLRST", theta, gate)
-
-    # 6. SVD: group (u,l,r,S) vs (D,L,R,T)
-    left_size = D_u * D_l * D_r * d
-    right_size = B_d * B_l * B_r * d
-    mat = theta.transpose(0, 1, 2, 6, 3, 4, 5, 7).reshape(left_size, right_size)
-
-    U_mat, sigma, Vh_mat = jnp.linalg.svd(mat, full_matrices=False)
-    keep = min(max_bond_dim, len(sigma))
-    U_mat = U_mat[:, :keep]
-    sigma = sigma[:keep]
-    Vh_mat = Vh_mat[:keep, :]
-
-    # 7. New lambda
-    lam_new = sigma / (jnp.max(sigma) + eps)
-
-    # 8. Reconstruct A_new and B_new
-    sqrt_sig = jnp.sqrt(sigma + eps)
-    A_left = (U_mat * sqrt_sig[None, :]).reshape(D_u, D_l, D_r, d, keep)
-    A_new = A_left.transpose(0, 4, 1, 2, 3)  # (D_u, keep, D_l, D_r, d)
-
-    B_right = (sqrt_sig[:, None] * Vh_mat).reshape(keep, B_d, B_l, B_r, d)
-    B_new = B_right.transpose(0, 1, 2, 3, 4)  # (keep, B_d, B_l, B_r, d)
-
-    # 9. Remove outer lambdas
-    lam_v_inv = 1.0 / (lam_v + eps)
-    lam_h_inv = 1.0 / (lam_h + eps)
-    A_new = A_new * lam_v_inv[:D_u, None, None, None, None]
-    A_new = A_new * lam_h_inv[None, None, :D_l, None, None]
-    A_new = A_new * lam_h_inv[None, None, None, :D_r, None]
-    A_new = A_new / (jnp.linalg.norm(A_new) + eps)
-
-    B_new = B_new * lam_v_inv[None, :B_d, None, None, None]
-    B_new = B_new * lam_h_inv[None, None, :B_l, None, None]
-    B_new = B_new * lam_h_inv[None, None, None, :B_r, None]
-    B_new = B_new / (jnp.linalg.norm(B_new) + eps)
-
-    lambdas_new = dict(lambdas)
-    lambdas_new["vertical"] = lam_new
     return A_new, B_new, lambdas_new
 
 
@@ -1012,7 +850,9 @@ def _initialize_ctm_env(a: jax.Array, chi: int) -> CTMEnvironment:
     # Initialize corners as identity matrices (chi x chi)
     C = jnp.eye(min(chi, D2), dtype=dtype)
     C_small = jnp.zeros((chi, chi), dtype=dtype)
-    C_small = C_small.at[:C.shape[0], :C.shape[1]].set(C[:min(chi, C.shape[0]), :min(chi, C.shape[1])])
+    C_small = C_small.at[: C.shape[0], : C.shape[1]].set(
+        C[: min(chi, C.shape[0]), : min(chi, C.shape[1])]
+    )
 
     # Initialize edges as a slice of the double-layer tensor
     # T[chi, D2, chi] — use first chi values
@@ -1023,97 +863,61 @@ def _initialize_ctm_env(a: jax.Array, chi: int) -> CTMEnvironment:
         T_init = T_init.at[i, :, i].add(jnp.ones(D2))
 
     return CTMEnvironment(
-        C1=C_small, C2=C_small, C3=C_small, C4=C_small,
-        T1=T_init, T2=T_init, T3=T_init, T4=T_init,
+        C1=C_small,
+        C2=C_small,
+        C3=C_small,
+        C4=C_small,
+        T1=T_init,
+        T2=T_init,
+        T3=T_init,
+        T4=T_init,
     )
 
 
-def _absorb_edge(T: jax.Array, a: jax.Array, chi: int, axis: int) -> jax.Array:
-    """Absorb the double-layer tensor *a* into edge tensor *T* along one axis.
+def _ctm_move(
+    C1g: jax.Array,
+    C2g: jax.Array,
+    Tg: jax.Array,
+    chi: int,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Projector-based CTM truncation shared by all directional moves.
 
-    T has shape ``(chi, D2, chi)`` and ``a`` has shape ``(D2, D2, D2, D2)``
-    with legs ordered ``(u, d, l, r)``.
+    Given two grown corners ``C1g`` and ``C2g`` (each a 2-D matrix whose row
+    dimension is ``chi * D2``) and a grown edge tensor ``Tg`` of shape
+    ``(chi*D2, D2, chi*D2)``, compute a single isometric projector from the
+    combined half-system density matrix (Corboz et al., PRB 90, 165127, 2014),
+    then truncate both corners and the edge to bond dimension ``chi``.
 
-    *axis* selects which leg of ``a`` is contracted with T's middle leg (index 1):
-        0 → a.u  (used by bottom-move for T3)
-        1 → a.d  (used by top-move for T1)
-        2 → a.l  (used by right-move for T2)
-        3 → a.r  (used by left-move for T4)
+    The projector ``P`` is obtained from the eigendecomposition of the
+    half-system density matrix ``rho = C1g @ C1g.T + C2g @ C2g.T``.
+    Using ``eigh`` (symmetric eigendecomposition) is more numerically
+    stable than SVD of the concatenated corners when ``chi * D2 == 2 * chi``
+    (square matrix case), avoiding spurious sign oscillations in the
+    projector that prevent convergence.
 
-    Returns a new edge tensor of shape ``(chi, D2_open, chi)`` where ``D2_open``
-    is the dimension of the leg of ``a`` *opposite* to the contracted one.
+    Returns ``(C1_new, C2_new, T_new)`` with shapes ``(chi', col1)``,
+    ``(chi', col2)``, ``(chi', D2, chi')`` where ``chi' <= chi``.
     """
-    # Move the contracted axis of `a` to position 0, keep the rest
-    # a axes: (u=0, d=1, l=2, r=3)
-    perm = [axis] + [i for i in range(4) if i != axis]
-    a_t = a.transpose(perm)  # (contracted, remaining0, remaining1, remaining2)
+    # Half-system density matrix (Corboz et al. 2014).
+    # rho = C1g @ C1g^T + C2g @ C2g^T is positive semi-definite.
+    # Its leading eigenvectors form the optimal isometric projector.
+    rho = C1g @ C1g.T + C2g @ C2g.T
+    rho = 0.5 * (rho + rho.T)  # enforce exact symmetry
 
-    # Contract T's middle leg (dim D2) with a's contracted axis (dim D2)
-    # T[i, x, j] * a_t[x, r0, r1, r2] -> (i, j, r0, r1, r2)
-    Ta = jnp.einsum("ixj,xabc->ijabc", T, a_t)
-    # shape: (chi, chi, D2, D2, D2)
+    eigvals, eigvecs = jnp.linalg.eigh(rho)
+    # eigh returns eigenvalues in ascending order; take the top chi.
+    k = min(chi, len(eigvals))
+    P = eigvecs[:, -k:][:, ::-1]  # (n, chi'), largest first
 
-    # We need to figure out which remaining axis is the "open" bond direction
-    # (the one that stays as the middle leg of the new T) vs the two that get
-    # grouped with the chi legs for truncation.
-    # For a 1×1 cell the two "parallel" legs of `a` that align with T's chi
-    # legs should be grouped with them, and the "perpendicular" leg stays open.
-    #
-    # Convention (see environment layout):
-    #   left-move  (axis=3, a.r): open=a.l(2), parallel= a.u(0), a.d(1)
-    #   right-move (axis=2, a.l): open=a.r(3), parallel= a.u(0), a.d(1)
-    #   top-move   (axis=1, a.d): open=a.u(0), parallel= a.l(2), a.r(3)
-    #   bottom-move(axis=0, a.u): open=a.d(1), parallel= a.l(2), a.r(3)
-    #
-    # In our permuted ordering (after removing the contracted axis), the
-    # remaining axes in original numbering are:
-    remaining = [i for i in range(4) if i != axis]
-
-    # Determine which remaining axis is "open" (perpendicular to the move)
-    opposite_map = {0: 1, 1: 0, 2: 3, 3: 2}
-    open_axis_orig = opposite_map[axis]
-    open_pos = remaining.index(open_axis_orig)  # position in (r0, r1, r2)
-    par_pos = [i for i in range(3) if i != open_pos]  # two parallel positions
-
-    # Ta shape is (chi, chi, r0, r1, r2)
-    # Transpose so layout is: (chi, par0, chi, par1, open)
-    # then reshape to (chi*par0, chi*par1, open) and truncate both groups to chi
-    #
-    # Simpler: reshape to (chi*D2_par0, open, chi*D2_par1) -> truncate
-    # Build permutation of axes (i=0, j=1, a=2, b=3, c=4)
-    # We want: (i, par[0]+2, open_pos+2, j, par[1]+2)
-    target_order = [0, par_pos[0] + 2, open_pos + 2, 1, par_pos[1] + 2]
-    Ta = Ta.transpose(target_order)
-    s = Ta.shape  # (chi, D2_par0, D2_open, chi, D2_par1)
-    Ta = Ta.reshape(s[0] * s[1], s[2], s[3] * s[4])
-    # Truncate the first and last dims back to chi
-    # Reshape to matrix for SVD: (chi*D2_par0, D2_open * chi*D2_par1)
-    mat = Ta.reshape(s[0] * s[1], s[2] * s[3] * s[4])
-    U, sig, Vh = truncated_svd_ad(mat, chi)
-    n = sig.shape[0]
-    # Left isometry: (chi*D2_par0) -> chi
-    P_l = U[:, :n]  # (chi*D2_par0, n)
-    # Right isometry from Vh: (n, D2_open * chi*D2_par1)
-    P_r = Vh[:n, :]  # (n, D2_open * chi*D2_par1)
-
-    # T_new = P_l^T @ Ta_mat @ ... but simpler: just use truncated SVD result
-    T_trunc = (P_l[:, :n] * sig[:n][None, :]) @ P_r[:n, :]
-    D2_open = s[2]
-    T_new = T_trunc.reshape(n, D2_open, -1)
-    # The last dim might be > chi, truncate via another SVD
-    if T_new.shape[2] > chi:
-        mat2 = T_new.reshape(n * D2_open, T_new.shape[2])
-        U2, s2, Vh2 = truncated_svd_ad(mat2, chi)
-        n2 = s2.shape[0]
-        T_new = (U2[:, :n2] * s2[:n2][None, :]) @ Vh2[:n2, :chi]
-        T_new = T_new.reshape(n, D2_open, min(chi, T_new.shape[1]))
-
-    # Pad/trim to exact (chi, D2_open, chi)
-    T_out = jnp.zeros((chi, D2_open, chi), dtype=T.dtype)
-    n0 = min(n, chi)
-    n2 = min(T_new.shape[2], chi)
-    T_out = T_out.at[:n0, :, :n2].set(T_new[:n0, :, :n2])
-    return T_out
+    # Project corners — stop gradient through P for AD stability.
+    # The implicit fixed-point differentiation (ctm_converge) handles
+    # the overall response; differentiating through the projector
+    # eigenvectors causes gradient blowup from degenerate eigenvalues.
+    P_sg = jax.lax.stop_gradient(P)
+    C1_new = P_sg.T @ C1g  # (chi', col1)
+    C2_new = P_sg.T @ C2g  # (chi', col2)
+    T_new = jnp.einsum("ia,idj,jb->adb", P_sg, Tg, P_sg)
+    return C1_new, C2_new, T_new
 
 
 def _ctm_left_move(
@@ -1121,26 +925,29 @@ def _ctm_left_move(
     a: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """Single CTM left absorption step.
+    """Projector-based CTM left move: updates C1, T4, C4.
 
-    Absorbs one column into the left environment: updates C1, T4, C4.
+    Grows C1 with T1, C4 with T3, T4 with ``a``, then truncates with
+    consistent projectors derived from the grown corners.
     """
     D2 = a.shape[0]
+    # Grow corners
+    C1g = jnp.einsum("ab,buc->auc", env.C1, env.T1).reshape(-1, env.T1.shape[2])
+    C4g = jnp.einsum("gh,hdi->gdi", env.C4, env.T3).reshape(-1, env.T3.shape[2])
+    # Grow edge: T4[a,l,g] * a[u,d,l,r] -> (a,u,g,d,r)
+    T4g = jnp.einsum("alg,udlr->augdr", env.T4, a)
+    T4g = T4g.transpose(0, 1, 4, 2, 3).reshape(C1g.shape[0], D2, C4g.shape[0])
 
-    # C1_new = C1[chi,chi] · T1[chi,D2,chi] → (chi,D2,chi) → reshape (chi*D2, chi)
-    C1_new = jnp.einsum("ab,bdc->adc", env.C1, env.T1).reshape(chi * D2, chi)
-    C1_new = _truncate_to_chi(C1_new, chi)
-
-    # C4_new = C4[chi,chi] · T3[chi,D2,chi]
-    C4_new = jnp.einsum("ab,bdc->adc", env.C4, env.T3).reshape(chi * D2, chi)
-    C4_new = _truncate_to_chi(C4_new, chi)
-
-    # T4_new: absorb a along a.r (axis=3) into T4
-    T4_new = _absorb_edge(env.T4, a, chi, axis=3)
-
+    C1_new, C4_new, T4_new = _ctm_move(C1g, C4g, T4g, chi)
     return CTMEnvironment(
-        C1=C1_new, C2=env.C2, C3=env.C3, C4=C4_new,
-        T1=env.T1, T2=env.T2, T3=env.T3, T4=T4_new,
+        C1=C1_new,
+        C2=env.C2,
+        C3=env.C3,
+        C4=C4_new,
+        T1=env.T1,
+        T2=env.T2,
+        T3=env.T3,
+        T4=T4_new,
     )
 
 
@@ -1149,21 +956,25 @@ def _ctm_right_move(
     a: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """Single CTM right absorption step: updates C2, T2, C3."""
+    """Projector-based CTM right move: updates C2, T2, C3."""
     D2 = a.shape[0]
+    # Grow corners
+    C2g = jnp.einsum("ce,buc->eub", env.C2, env.T1).reshape(-1, env.T1.shape[0])
+    C3g = jnp.einsum("im,hdi->mdh", env.C3, env.T3).reshape(-1, env.T3.shape[0])
+    # Grow edge: T2[e,r,m] * a[u,d,l,r] -> (e,u,m,d,l)
+    T2g = jnp.einsum("erm,udlr->eumdl", env.T2, a)
+    T2g = T2g.transpose(0, 1, 4, 2, 3).reshape(C2g.shape[0], D2, C3g.shape[0])
 
-    C2_new = jnp.einsum("ab,bdc->adc", env.C2, env.T1).reshape(chi * D2, chi)
-    C2_new = _truncate_to_chi(C2_new, chi)
-
-    C3_new = jnp.einsum("ab,bdc->adc", env.C3, env.T3).reshape(chi * D2, chi)
-    C3_new = _truncate_to_chi(C3_new, chi)
-
-    # T2_new: absorb a along a.l (axis=2) into T2
-    T2_new = _absorb_edge(env.T2, a, chi, axis=2)
-
+    C2_new, C3_new, T2_new = _ctm_move(C2g, C3g, T2g, chi)
     return CTMEnvironment(
-        C1=env.C1, C2=C2_new, C3=C3_new, C4=env.C4,
-        T1=env.T1, T2=T2_new, T3=env.T3, T4=env.T4,
+        C1=env.C1,
+        C2=C2_new,
+        C3=C3_new,
+        C4=env.C4,
+        T1=env.T1,
+        T2=T2_new,
+        T3=env.T3,
+        T4=env.T4,
     )
 
 
@@ -1172,21 +983,25 @@ def _ctm_top_move(
     a: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """Single CTM top absorption step: updates C1, T1, C2."""
+    """Projector-based CTM top move: updates C1, T1, C2."""
     D2 = a.shape[0]
+    # Grow corners
+    C1g = jnp.einsum("ab,alg->blg", env.C1, env.T4).reshape(-1, env.T4.shape[2])
+    C2g = jnp.einsum("ce,erm->crm", env.C2, env.T2).reshape(-1, env.T2.shape[2])
+    # Grow edge: T1[b,u,c] * a[u,d,l,r] -> (b,c,d,l,r)
+    T1g = jnp.einsum("buc,udlr->bcdlr", env.T1, a)
+    T1g = T1g.transpose(0, 3, 2, 1, 4).reshape(C1g.shape[0], D2, C2g.shape[0])
 
-    C1_new = jnp.einsum("ab,bdc->adc", env.C1, env.T4).reshape(chi * D2, chi)
-    C1_new = _truncate_to_chi(C1_new, chi)
-
-    C2_new = jnp.einsum("ab,bdc->adc", env.C2, env.T2).reshape(chi * D2, chi)
-    C2_new = _truncate_to_chi(C2_new, chi)
-
-    # T1_new: absorb a along a.d (axis=1) into T1
-    T1_new = _absorb_edge(env.T1, a, chi, axis=1)
-
+    C1_new, C2_new, T1_new = _ctm_move(C1g, C2g, T1g, chi)
     return CTMEnvironment(
-        C1=C1_new, C2=C2_new, C3=env.C3, C4=env.C4,
-        T1=T1_new, T2=env.T2, T3=env.T3, T4=env.T4,
+        C1=C1_new,
+        C2=C2_new,
+        C3=env.C3,
+        C4=env.C4,
+        T1=T1_new,
+        T2=env.T2,
+        T3=env.T3,
+        T4=env.T4,
     )
 
 
@@ -1195,35 +1010,32 @@ def _ctm_bottom_move(
     a: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """Single CTM bottom absorption step: updates C3, T3, C4."""
+    """Projector-based CTM bottom move: updates C4, T3, C3."""
     D2 = a.shape[0]
+    # Grow corners
+    C4g = jnp.einsum("gh,alg->hal", env.C4, env.T4)
+    C4g = C4g.transpose(0, 2, 1).reshape(-1, env.T4.shape[0])
+    C3g = jnp.einsum("im,erm->ire", env.C3, env.T2).reshape(-1, env.T2.shape[0])
+    # Grow edge: T3[h,d,i] * a[u,d,l,r] -> (h,i,u,l,r)
+    T3g = jnp.einsum("hdi,udlr->hiulr", env.T3, a)
+    T3g = T3g.transpose(0, 3, 2, 1, 4).reshape(C4g.shape[0], D2, C3g.shape[0])
 
-    C3_new = jnp.einsum("ab,bdc->adc", env.C3, env.T2).reshape(chi * D2, chi)
-    C3_new = _truncate_to_chi(C3_new, chi)
-
-    C4_new = jnp.einsum("ab,bdc->adc", env.C4, env.T4).reshape(chi * D2, chi)
-    C4_new = _truncate_to_chi(C4_new, chi)
-
-    # T3_new: absorb a along a.u (axis=0) into T3
-    T3_new = _absorb_edge(env.T3, a, chi, axis=0)
-
+    C4_new, C3_new, T3_new = _ctm_move(C4g, C3g, T3g, chi)
     return CTMEnvironment(
-        C1=env.C1, C2=env.C2, C3=C3_new, C4=C4_new,
-        T1=env.T1, T2=env.T2, T3=T3_new, T4=env.T4,
+        C1=env.C1,
+        C2=env.C2,
+        C3=C3_new,
+        C4=C4_new,
+        T1=env.T1,
+        T2=env.T2,
+        T3=T3_new,
+        T4=env.T4,
     )
-
-
-def _truncate_to_chi(M: jax.Array, chi: int) -> jax.Array:
-    """Truncate a 2D matrix to chi x chi via SVD."""
-    if M.ndim != 2:
-        M = M.reshape(M.shape[0], -1)
-    U, s, Vh = truncated_svd_ad(M, chi)
-    # truncated_svd_ad already returns truncated (U[:,:k], s[:k], Vh[:k,:])
-    return (U[:chi, :] * s[None, :]) @ Vh[:, :chi]
 
 
 def _renormalize_env(env: CTMEnvironment) -> CTMEnvironment:
     """Normalize environment tensors to prevent exponential growth."""
+
     def normalize(x: jax.Array) -> jax.Array:
         norm = jnp.max(jnp.abs(x))
         return x / (norm + EPS)
@@ -1246,16 +1058,26 @@ def _ctm_left_move_2site(
     a_neighbor: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """2-site CTM left absorption: C from self, perpendicular T from neighbor."""
+    """Projector-based 2-site CTM left move."""
     D2 = a_neighbor.shape[0]
-    C1_new = jnp.einsum("ab,bdc->adc", env_self.C1, env_neighbor.T1).reshape(chi * D2, chi)
-    C1_new = _truncate_to_chi(C1_new, chi)
-    C4_new = jnp.einsum("ab,bdc->adc", env_self.C4, env_neighbor.T3).reshape(chi * D2, chi)
-    C4_new = _truncate_to_chi(C4_new, chi)
-    T4_new = _absorb_edge(env_self.T4, a_neighbor, chi, axis=3)
+    C1g = jnp.einsum("ab,buc->auc", env_self.C1, env_neighbor.T1).reshape(
+        -1, env_neighbor.T1.shape[2]
+    )
+    C4g = jnp.einsum("gh,hdi->gdi", env_self.C4, env_neighbor.T3).reshape(
+        -1, env_neighbor.T3.shape[2]
+    )
+    T4g = jnp.einsum("alg,udlr->augdr", env_self.T4, a_neighbor)
+    T4g = T4g.transpose(0, 1, 4, 2, 3).reshape(C1g.shape[0], D2, C4g.shape[0])
+    C1_new, C4_new, T4_new = _ctm_move(C1g, C4g, T4g, chi)
     return CTMEnvironment(
-        C1=C1_new, C2=env_self.C2, C3=env_self.C3, C4=C4_new,
-        T1=env_self.T1, T2=env_self.T2, T3=env_self.T3, T4=T4_new,
+        C1=C1_new,
+        C2=env_self.C2,
+        C3=env_self.C3,
+        C4=C4_new,
+        T1=env_self.T1,
+        T2=env_self.T2,
+        T3=env_self.T3,
+        T4=T4_new,
     )
 
 
@@ -1265,16 +1087,26 @@ def _ctm_right_move_2site(
     a_neighbor: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """2-site CTM right absorption: C from self, perpendicular T from neighbor."""
+    """Projector-based 2-site CTM right move."""
     D2 = a_neighbor.shape[0]
-    C2_new = jnp.einsum("ab,bdc->adc", env_self.C2, env_neighbor.T1).reshape(chi * D2, chi)
-    C2_new = _truncate_to_chi(C2_new, chi)
-    C3_new = jnp.einsum("ab,bdc->adc", env_self.C3, env_neighbor.T3).reshape(chi * D2, chi)
-    C3_new = _truncate_to_chi(C3_new, chi)
-    T2_new = _absorb_edge(env_self.T2, a_neighbor, chi, axis=2)
+    C2g = jnp.einsum("ce,buc->eub", env_self.C2, env_neighbor.T1).reshape(
+        -1, env_neighbor.T1.shape[0]
+    )
+    C3g = jnp.einsum("im,hdi->mdh", env_self.C3, env_neighbor.T3).reshape(
+        -1, env_neighbor.T3.shape[0]
+    )
+    T2g = jnp.einsum("erm,udlr->eumdl", env_self.T2, a_neighbor)
+    T2g = T2g.transpose(0, 1, 4, 2, 3).reshape(C2g.shape[0], D2, C3g.shape[0])
+    C2_new, C3_new, T2_new = _ctm_move(C2g, C3g, T2g, chi)
     return CTMEnvironment(
-        C1=env_self.C1, C2=C2_new, C3=C3_new, C4=env_self.C4,
-        T1=env_self.T1, T2=T2_new, T3=env_self.T3, T4=env_self.T4,
+        C1=env_self.C1,
+        C2=C2_new,
+        C3=C3_new,
+        C4=env_self.C4,
+        T1=env_self.T1,
+        T2=T2_new,
+        T3=env_self.T3,
+        T4=env_self.T4,
     )
 
 
@@ -1284,16 +1116,26 @@ def _ctm_top_move_2site(
     a_neighbor: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """2-site CTM top absorption: C from self, perpendicular T from neighbor."""
+    """Projector-based 2-site CTM top move."""
     D2 = a_neighbor.shape[0]
-    C1_new = jnp.einsum("ab,bdc->adc", env_self.C1, env_neighbor.T4).reshape(chi * D2, chi)
-    C1_new = _truncate_to_chi(C1_new, chi)
-    C2_new = jnp.einsum("ab,bdc->adc", env_self.C2, env_neighbor.T2).reshape(chi * D2, chi)
-    C2_new = _truncate_to_chi(C2_new, chi)
-    T1_new = _absorb_edge(env_self.T1, a_neighbor, chi, axis=1)
+    C1g = jnp.einsum("ab,alg->blg", env_self.C1, env_neighbor.T4).reshape(
+        -1, env_neighbor.T4.shape[2]
+    )
+    C2g = jnp.einsum("ce,erm->crm", env_self.C2, env_neighbor.T2).reshape(
+        -1, env_neighbor.T2.shape[2]
+    )
+    T1g = jnp.einsum("buc,udlr->bcdlr", env_self.T1, a_neighbor)
+    T1g = T1g.transpose(0, 3, 2, 1, 4).reshape(C1g.shape[0], D2, C2g.shape[0])
+    C1_new, C2_new, T1_new = _ctm_move(C1g, C2g, T1g, chi)
     return CTMEnvironment(
-        C1=C1_new, C2=C2_new, C3=env_self.C3, C4=env_self.C4,
-        T1=T1_new, T2=env_self.T2, T3=env_self.T3, T4=env_self.T4,
+        C1=C1_new,
+        C2=C2_new,
+        C3=env_self.C3,
+        C4=env_self.C4,
+        T1=T1_new,
+        T2=env_self.T2,
+        T3=env_self.T3,
+        T4=env_self.T4,
     )
 
 
@@ -1303,16 +1145,25 @@ def _ctm_bottom_move_2site(
     a_neighbor: jax.Array,
     chi: int,
 ) -> CTMEnvironment:
-    """2-site CTM bottom absorption: C from self, perpendicular T from neighbor."""
+    """Projector-based 2-site CTM bottom move."""
     D2 = a_neighbor.shape[0]
-    C3_new = jnp.einsum("ab,bdc->adc", env_self.C3, env_neighbor.T2).reshape(chi * D2, chi)
-    C3_new = _truncate_to_chi(C3_new, chi)
-    C4_new = jnp.einsum("ab,bdc->adc", env_self.C4, env_neighbor.T4).reshape(chi * D2, chi)
-    C4_new = _truncate_to_chi(C4_new, chi)
-    T3_new = _absorb_edge(env_self.T3, a_neighbor, chi, axis=0)
+    C4g = jnp.einsum("gh,alg->hal", env_self.C4, env_neighbor.T4)
+    C4g = C4g.transpose(0, 2, 1).reshape(-1, env_neighbor.T4.shape[0])
+    C3g = jnp.einsum("im,erm->ire", env_self.C3, env_neighbor.T2).reshape(
+        -1, env_neighbor.T2.shape[0]
+    )
+    T3g = jnp.einsum("hdi,udlr->hiulr", env_self.T3, a_neighbor)
+    T3g = T3g.transpose(0, 3, 2, 1, 4).reshape(C4g.shape[0], D2, C3g.shape[0])
+    C4_new, C3_new, T3_new = _ctm_move(C4g, C3g, T3g, chi)
     return CTMEnvironment(
-        C1=env_self.C1, C2=env_self.C2, C3=C3_new, C4=C4_new,
-        T1=env_self.T1, T2=env_self.T2, T3=T3_new, T4=env_self.T4,
+        C1=env_self.C1,
+        C2=env_self.C2,
+        C3=C3_new,
+        C4=C4_new,
+        T1=env_self.T1,
+        T2=env_self.T2,
+        T3=T3_new,
+        T4=env_self.T4,
     )
 
 
@@ -1391,8 +1242,12 @@ def ctm_2site(
 
     # Carry: (env_A, env_B, prev_sv_A, prev_sv_B, iteration, converged)
     init_carry = (
-        env_A, env_B, prev_sv_A, prev_sv_B,
-        jnp.array(0, dtype=jnp.int32), jnp.bool_(False),
+        env_A,
+        env_B,
+        prev_sv_A,
+        prev_sv_B,
+        jnp.array(0, dtype=jnp.int32),
+        jnp.bool_(False),
     )
 
     def cond_fn(carry):
@@ -1442,7 +1297,9 @@ def _rdm2x1(A: jax.Array, env: CTMEnvironment, d: int) -> jax.Array:
         |     |     |    |
         C4 — T3 — T3 — C3
 
-    Returns RDM with shape ``(d, d, d, d)`` — ``(s1, s1', s2, s2')``.
+    Returns RDM with shape ``(d, d, d, d)`` — ``(s1, s2, s1', s2')``
+    (ket indices first, bra indices second), so that
+    ``rdm.reshape(d*d, d*d)`` is a proper density matrix.
     """
     C1, C2, C3, C4, T1, T2, T3, T4 = env
     a_open = _build_double_layer_open(A)  # (D2, D2, D2, D2, d, d)
@@ -1480,6 +1337,11 @@ def _rdm2x1(A: jax.Array, env: CTMEnvironment, d: int) -> jax.Array:
     # Final: contract Lenv_ao1 with Renv_ao2
     # Match: c=c, j=j, r1=l2  → free: s1, s1', s2, s2'
     rdm = jnp.einsum("crjst,cjruv->stuv", Lenv_ao1, Renv_ao2)
+    # rdm has convention (s1_ket, s1_bra, s2_ket, s2_bra).
+    # Transpose to (s1_ket, s2_ket, s1_bra, s2_bra) so that
+    # reshape(d*d, d*d) yields a proper density matrix with rows =
+    # ket and columns = bra, matching the Hamiltonian convention.
+    rdm = rdm.transpose(0, 2, 1, 3)
 
     # Symmetrize and normalize
     rdm_mat = rdm.reshape(d * d, d * d)
@@ -1503,7 +1365,9 @@ def _rdm1x2(A: jax.Array, env: CTMEnvironment, d: int) -> jax.Array:
         |      |      |
         C4  — T3  — C3
 
-    Returns RDM with shape ``(d, d, d, d)`` — ``(s1, s1', s2, s2')``.
+    Returns RDM with shape ``(d, d, d, d)`` — ``(s1, s2, s1', s2')``
+    (ket indices first, bra indices second), so that
+    ``rdm.reshape(d*d, d*d)`` is a proper density matrix.
     """
     C1, C2, C3, C4, T1, T2, T3, T4 = env
     a_open = _build_double_layer_open(A)
@@ -1543,6 +1407,10 @@ def _rdm1x2(A: jax.Array, env: CTMEnvironment, d: int) -> jax.Array:
 
     # Final: contract site12_r with bot_row  match h, q=d2, i
     rdm = jnp.einsum("hqistwx,hqi->stwx", site12_r, bot_row)
+    # rdm has convention (s1_ket, s1_bra, s2_ket, s2_bra).
+    # Transpose to (s1_ket, s2_ket, s1_bra, s2_bra) so that
+    # reshape(d*d, d*d) yields a proper density matrix.
+    rdm = rdm.transpose(0, 2, 1, 3)
 
     # Symmetrize and normalize
     rdm_mat = rdm.reshape(d * d, d * d)
@@ -1619,6 +1487,9 @@ def _rdm2x1_2site(
     Renv_ao = jnp.einsum("curjd,udlrtv->cjltv", Renv, ao_B)
     # Final contraction
     rdm = jnp.einsum("crjst,cjruv->stuv", Lenv_ao, Renv_ao)
+    # Transpose from (s1_ket, s1_bra, s2_ket, s2_bra) to
+    # (s1_ket, s2_ket, s1_bra, s2_bra) for proper density matrix convention.
+    rdm = rdm.transpose(0, 2, 1, 3)
 
     rdm_mat = rdm.reshape(d * d, d * d)
     rdm_mat = 0.5 * (rdm_mat + rdm_mat.conj().T)
@@ -1664,6 +1535,9 @@ def _rdm1x2_2site(
     bot_row = jnp.einsum("hj,jqk,ik->hqi", env_B.C4, env_B.T3, env_B.C3)
     # Final
     rdm = jnp.einsum("hqistwx,hqi->stwx", site12_r, bot_row)
+    # Transpose from (s1_ket, s1_bra, s2_ket, s2_bra) to
+    # (s1_ket, s2_ket, s1_bra, s2_bra) for proper density matrix convention.
+    rdm = rdm.transpose(0, 2, 1, 3)
 
     rdm_mat = rdm.reshape(d * d, d * d)
     rdm_mat = 0.5 * (rdm_mat + rdm_mat.conj().T)
@@ -1709,24 +1583,42 @@ def _build_1x1_peps(A: jax.Array, d: int, D: int) -> TensorNetwork:
         # (D_l, D_r, d)
         D_l, D_r, d_actual = A.shape
         indices = (
-            TensorIndex(sym, np.zeros(D_l, dtype=np.int32), FlowDirection.IN,  label="left"),
-            TensorIndex(sym, np.zeros(D_r, dtype=np.int32), FlowDirection.OUT, label="right"),
-            TensorIndex(sym, np.zeros(d_actual, dtype=np.int32), FlowDirection.IN, label="phys"),
+            TensorIndex(
+                sym, np.zeros(D_l, dtype=np.int32), FlowDirection.IN, label="left"
+            ),
+            TensorIndex(
+                sym, np.zeros(D_r, dtype=np.int32), FlowDirection.OUT, label="right"
+            ),
+            TensorIndex(
+                sym, np.zeros(d_actual, dtype=np.int32), FlowDirection.IN, label="phys"
+            ),
         )
     elif A.ndim == 5:
         # (D_u, D_d, D_l, D_r, d)
         D_u, D_d, D_l, D_r, d_actual = A.shape
         indices = (
-            TensorIndex(sym, np.zeros(D_u, dtype=np.int32), FlowDirection.IN,  label="up"),
-            TensorIndex(sym, np.zeros(D_d, dtype=np.int32), FlowDirection.OUT, label="down"),
-            TensorIndex(sym, np.zeros(D_l, dtype=np.int32), FlowDirection.IN,  label="left"),
-            TensorIndex(sym, np.zeros(D_r, dtype=np.int32), FlowDirection.OUT, label="right"),
-            TensorIndex(sym, np.zeros(d_actual, dtype=np.int32), FlowDirection.IN, label="phys"),
+            TensorIndex(
+                sym, np.zeros(D_u, dtype=np.int32), FlowDirection.IN, label="up"
+            ),
+            TensorIndex(
+                sym, np.zeros(D_d, dtype=np.int32), FlowDirection.OUT, label="down"
+            ),
+            TensorIndex(
+                sym, np.zeros(D_l, dtype=np.int32), FlowDirection.IN, label="left"
+            ),
+            TensorIndex(
+                sym, np.zeros(D_r, dtype=np.int32), FlowDirection.OUT, label="right"
+            ),
+            TensorIndex(
+                sym, np.zeros(d_actual, dtype=np.int32), FlowDirection.IN, label="phys"
+            ),
         )
     else:
         # Generic fallback
         indices = tuple(
-            TensorIndex(sym, np.zeros(s, dtype=np.int32), FlowDirection.IN, label=f"leg{i}")
+            TensorIndex(
+                sym, np.zeros(s, dtype=np.int32), FlowDirection.IN, label=f"leg{i}"
+            )
             for i, s in enumerate(A.shape)
         )
 
@@ -1781,11 +1673,23 @@ def _ipeps_2site(
         lam_v = lambdas["vertical"]
         if step % 2 == 0:
             A, B, lambdas = _simple_update_2site_horizontal(
-                A, B, lam_h, lam_v, trotter_gate, D, lambdas,
+                A,
+                B,
+                lam_h,
+                lam_v,
+                trotter_gate,
+                D,
+                lambdas,
             )
         else:
             A, B, lambdas = _simple_update_2site_vertical(
-                A, B, lam_h, lam_v, trotter_gate, D, lambdas,
+                A,
+                B,
+                lam_h,
+                lam_v,
+                trotter_gate,
+                D,
+                lambdas,
             )
 
     # Build PEPS TensorNetwork
@@ -1794,11 +1698,21 @@ def _ipeps_2site(
     for label, tensor in [((0, 0), A), ((1, 0), B)]:
         D_u, D_d, D_l, D_r, d_phys = tensor.shape
         indices = (
-            TensorIndex(sym, np.zeros(D_u, dtype=np.int32), FlowDirection.IN, label="up"),
-            TensorIndex(sym, np.zeros(D_d, dtype=np.int32), FlowDirection.OUT, label="down"),
-            TensorIndex(sym, np.zeros(D_l, dtype=np.int32), FlowDirection.IN, label="left"),
-            TensorIndex(sym, np.zeros(D_r, dtype=np.int32), FlowDirection.OUT, label="right"),
-            TensorIndex(sym, np.zeros(d_phys, dtype=np.int32), FlowDirection.IN, label="phys"),
+            TensorIndex(
+                sym, np.zeros(D_u, dtype=np.int32), FlowDirection.IN, label="up"
+            ),
+            TensorIndex(
+                sym, np.zeros(D_d, dtype=np.int32), FlowDirection.OUT, label="down"
+            ),
+            TensorIndex(
+                sym, np.zeros(D_l, dtype=np.int32), FlowDirection.IN, label="left"
+            ),
+            TensorIndex(
+                sym, np.zeros(D_r, dtype=np.int32), FlowDirection.OUT, label="right"
+            ),
+            TensorIndex(
+                sym, np.zeros(d_phys, dtype=np.int32), FlowDirection.IN, label="phys"
+            ),
         )
         peps.add_node(label, DenseTensor(tensor, indices))
 
@@ -1849,8 +1763,12 @@ def optimize_gs_ad(
     A = A / (jnp.linalg.norm(A) + 1e-10)
 
     # Pack CTM config as tuple for JAX tracing
-    config_tuple = (config.ctm.chi, config.ctm.max_iter,
-                    config.ctm.conv_tol, int(config.ctm.renormalize))
+    config_tuple = (
+        config.ctm.chi,
+        config.ctm.max_iter,
+        config.ctm.conv_tol,
+        int(config.ctm.renormalize),
+    )
 
     # Define loss: A -> energy
     def loss_fn(A_param):
