@@ -8,7 +8,7 @@ computation.
 Key design choices:
 - Edges are identified by (node_a, label_a, node_b, label_b) — no positional indexing
 - connect_by_shared_label() auto-connects nodes that share a label name
-- Contraction cache keyed by frozenset[NodeId] for O(1) lookup
+- Contraction cache keyed by tuple[NodeId] for O(1) lookup (order-sensitive)
 - Cache invalidated on any graph structure change (add/remove/replace/connect)
 """
 
@@ -34,7 +34,7 @@ class TensorNetwork:
     - Edges store which leg labels are connected: (label_a, label_b).
     - "Open" edges (no counterpart) represent physical/free indices.
 
-    The contraction cache maps (frozenset[NodeId], output_labels, optimize) ->
+    The contraction cache maps (tuple[NodeId], output_labels, optimize) ->
     Tensor, and is invalidated whenever the graph structure changes.
 
     Args:
@@ -357,7 +357,7 @@ class TensorNetwork:
         if nodes is None:
             nodes = list(self._tensors.keys())
 
-        cache_key = (frozenset(nodes), tuple(output_labels or ()), optimize)
+        cache_key = (tuple(nodes), tuple(output_labels or ()), optimize)
         if cache and cache_key in self._cache:
             return self._cache[cache_key]
 
