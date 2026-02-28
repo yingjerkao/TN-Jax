@@ -18,6 +18,23 @@ DMRG
 
 .. autofunction:: tnjax.algorithms.dmrg.build_random_mps
 
+iDMRG
+-----
+
+.. autoclass:: tnjax.algorithms.idmrg.iDMRGConfig
+   :members:
+   :no-index:
+
+.. autoclass:: tnjax.algorithms.idmrg.iDMRGResult
+   :members:
+   :no-index:
+
+.. autofunction:: tnjax.algorithms.idmrg.idmrg
+
+.. autofunction:: tnjax.algorithms.idmrg.build_bulk_mpo_heisenberg
+
+.. autofunction:: tnjax.algorithms.idmrg.build_bulk_mpo_heisenberg_cylinder
+
 TRG
 ---
 
@@ -58,6 +75,10 @@ iPEPS
 .. autofunction:: tnjax.algorithms.ipeps.ipeps
 
 .. autofunction:: tnjax.algorithms.ipeps.ctm
+
+.. autofunction:: tnjax.algorithms.ipeps.ctm_2site
+
+.. autofunction:: tnjax.algorithms.ipeps.compute_energy_ctm_2site
 
 .. autofunction:: tnjax.algorithms.ipeps.optimize_gs_ad
 

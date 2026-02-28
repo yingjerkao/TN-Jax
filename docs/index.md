@@ -35,6 +35,7 @@ guide/gotchas
 :caption: Algorithms
 
 guide/algorithms/dmrg
+guide/algorithms/idmrg
 guide/algorithms/trg
 guide/algorithms/hotrg
 guide/algorithms/ipeps

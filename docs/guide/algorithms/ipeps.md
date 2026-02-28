@@ -112,3 +112,67 @@ from tnjax import ctm, CTMConfig
 
 env = ctm(A_tensor, CTMConfig(chi=20, max_iter=100))
 ```
+
+## 2-site checkerboard unit cell
+
+A single-site unit cell cannot capture antiferromagnetic (Néel) order
+because both sublattices share the same tensor. Setting
+`unit_cell="2site"` in `iPEPSConfig` uses a 2-site checkerboard unit cell
+with independent tensors $A$ (sublattice 0) and $B$ (sublattice 1).
+
+On the checkerboard every neighbour of $A$ is $B$ and vice versa, which
+is the minimal unit cell for Néel-ordered states.
+
+### `ctm_2site()` -- standalone 2-site CTM
+
+Compute CTM environments for an existing 2-site iPEPS:
+
+```python
+from tnjax import ctm_2site, CTMConfig
+
+env_A, env_B = ctm_2site(A, B, CTMConfig(chi=20, max_iter=100))
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `A` | `jax.Array` | Site tensor for sublattice A, shape `(D, D, D, D, d)` |
+| `B` | `jax.Array` | Site tensor for sublattice B, shape `(D, D, D, D, d)` |
+| `config` | `CTMConfig` | CTM configuration |
+
+Returns a tuple `(env_A, env_B)` of `CTMEnvironment` named tuples.
+
+### `compute_energy_ctm_2site()` -- 2-site energy
+
+Compute the energy per site for a 2-site checkerboard iPEPS given
+converged environments:
+
+```python
+from tnjax import compute_energy_ctm_2site
+
+energy = compute_energy_ctm_2site(A, B, env_A, env_B, H_bond, d=2)
+```
+
+The energy includes one horizontal and one vertical bond per site:
+$E/\text{site} = E_h + E_v$.
+
+### AD ground-state optimization
+
+`optimize_gs_ad()` uses automatic differentiation through the CTM
+fixed-point equation to compute exact gradients of the energy with
+respect to the site tensor, then optimises with optax:
+
+```python
+from tnjax import iPEPSConfig, CTMConfig, optimize_gs_ad
+
+config = iPEPSConfig(
+    max_bond_dim=2,
+    ctm=CTMConfig(chi=20, max_iter=100),
+    gs_optimizer="adam",
+    gs_learning_rate=1e-3,
+    gs_num_steps=200,
+)
+A_opt, env, E_gs = optimize_gs_ad(H_bond, A_init=None, config=config)
+```
+
+For AD-based excitation spectra on top of an optimised iPEPS, see
+{doc}`ad_excitations`.
