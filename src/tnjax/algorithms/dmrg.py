@@ -783,7 +783,7 @@ def _svd_and_truncate_site(
     bond_label = f"v{site}_{site + 1}"
 
     # Single SVD via truncated_svd (handles both Dense and Symmetric)
-    A, s, B = truncated_svd(
+    A, s, B, s_full = truncated_svd(
         theta,
         left_labels=left_labels,
         right_labels=right_labels,
@@ -792,21 +792,12 @@ def _svd_and_truncate_site(
         max_truncation_err=config.svd_trunc_err,
     )
 
-    # Compute truncation error from full singular values (single SVD, no duplicate)
-    # We need the full spectrum to measure what was discarded.
-    # Reshape theta into a matrix and get all singular values cheaply.
-    dense = theta.todense()
-    left_dim = int(np.prod([theta.indices[theta.labels().index(lbl)].dim
-                             for lbl in left_labels if lbl in theta.labels()]))
-    right_dim = int(np.prod([theta.indices[theta.labels().index(lbl)].dim
-                              for lbl in right_labels if lbl in theta.labels()]))
-    matrix = dense.reshape(left_dim, right_dim) if dense.size > 0 else dense.reshape(1, 1)
-    s_all = jnp.linalg.svd(matrix, full_matrices=False, compute_uv=False)
-
-    n_keep = min(config.max_bond_dim, len(s_all))
-    if len(s_all) > n_keep:
-        total_sq = jnp.sum(s_all**2)
-        trunc_sq = jnp.sum(s_all[n_keep:] ** 2)
+    # Compute truncation error from the full singular-value spectrum
+    # returned by truncated_svd (no second SVD needed).
+    n_keep = len(s)
+    if len(s_full) > n_keep:
+        total_sq = jnp.sum(s_full**2)
+        trunc_sq = jnp.sum(s_full[n_keep:] ** 2)
         trunc_err = float(jnp.sqrt(trunc_sq / (total_sq + 1e-15)))
     else:
         trunc_err = 0.0

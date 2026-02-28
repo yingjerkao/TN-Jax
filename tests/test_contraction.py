@@ -337,8 +337,8 @@ class TestTruncatedSVD:
             TensorIndex(u1, charges_m, FlowDirection.OUT, label="col"),
         ))
 
-        U, s, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                  new_bond_label="bond")
+        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                     new_bond_label="bond")
 
         # Reconstruct: U[row, bond] * s[bond] * Vh[bond, col]
         recon = U.todense() * s[None, :] @ Vh.todense()
@@ -355,8 +355,8 @@ class TestTruncatedSVD:
         ))
 
         max_chi = 3
-        U, s, Vh = truncated_svd(t, left_labels=["left"], right_labels=["right"],
-                                   new_bond_label="bond", max_singular_values=max_chi)
+        U, s, Vh, _ = truncated_svd(t, left_labels=["left"], right_labels=["right"],
+                                      new_bond_label="bond", max_singular_values=max_chi)
         assert len(s) <= max_chi
         assert "bond" in U.labels()
         assert "bond" in Vh.labels()
@@ -369,8 +369,8 @@ class TestTruncatedSVD:
             TensorIndex(u1, charges, FlowDirection.IN,  label="a"),
             TensorIndex(u1, charges, FlowDirection.OUT, label="b"),
         ))
-        _, s, _ = truncated_svd(t, left_labels=["a"], right_labels=["b"],
-                                  new_bond_label="bond")
+        _, s, _, _ = truncated_svd(t, left_labels=["a"], right_labels=["b"],
+                                    new_bond_label="bond")
         s_np = np.array(s)
         assert np.all(s_np >= 0), "Singular values should be non-negative"
         assert np.all(np.diff(s_np) <= 1e-5), "Singular values should be non-increasing"
@@ -395,10 +395,59 @@ class TestTruncatedSVD:
             TensorIndex(u1, charges, FlowDirection.OUT, label="right"),
         ))
 
-        U, _, Vh = truncated_svd(t, left_labels=["left"], right_labels=["right"],
-                                   new_bond_label="my_bond")
+        U, _, Vh, _ = truncated_svd(t, left_labels=["left"], right_labels=["right"],
+                                      new_bond_label="my_bond")
         assert "my_bond" in U.labels()
         assert "my_bond" in Vh.labels()
+
+    def test_s_full_contains_all_singular_values(self, u1, rng):
+        """s_full should contain all singular values (length = min(m, n))."""
+        n, m = 6, 8
+        charges_n = np.zeros(n, dtype=np.int32)
+        charges_m = np.zeros(m, dtype=np.int32)
+        data = jax.random.normal(rng, (n, m))
+        t = DenseTensor(data, (
+            TensorIndex(u1, charges_n, FlowDirection.IN,  label="row"),
+            TensorIndex(u1, charges_m, FlowDirection.OUT, label="col"),
+        ))
+
+        max_chi = 3
+        _, s_trunc, _, s_full = truncated_svd(
+            t, left_labels=["row"], right_labels=["col"],
+            new_bond_label="bond", max_singular_values=max_chi,
+        )
+
+        # s_full should have min(n, m) entries (all singular values)
+        assert len(s_full) == min(n, m), (
+            f"Expected s_full length {min(n, m)}, got {len(s_full)}"
+        )
+        # s_trunc should be truncated to max_chi
+        assert len(s_trunc) == max_chi
+
+        # s_trunc should be a prefix of s_full (same top singular values)
+        np.testing.assert_allclose(
+            np.array(s_trunc), np.array(s_full[:max_chi]), rtol=1e-6,
+        )
+
+        # s_full should match an independent SVD
+        ref_s = jnp.linalg.svd(data, full_matrices=False, compute_uv=False)
+        np.testing.assert_allclose(np.array(s_full), np.array(ref_s), rtol=1e-6)
+
+    def test_s_full_no_truncation(self, u1, rng):
+        """Without truncation, s and s_full should be identical."""
+        n = 5
+        charges = np.zeros(n, dtype=np.int32)
+        data = jax.random.normal(rng, (n, n))
+        t = DenseTensor(data, (
+            TensorIndex(u1, charges, FlowDirection.IN,  label="a"),
+            TensorIndex(u1, charges, FlowDirection.OUT, label="b"),
+        ))
+
+        _, s, _, s_full = truncated_svd(
+            t, left_labels=["a"], right_labels=["b"], new_bond_label="bond",
+        )
+
+        np.testing.assert_allclose(np.array(s), np.array(s_full), rtol=1e-6)
 
 
 # ------------------------------------------------------------------ #
@@ -485,8 +534,8 @@ class TestTruncatedSVDSymmetric:
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
         original_dense = t.todense()
 
-        U, s, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                  new_bond_label="bond")
+        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                     new_bond_label="bond")
 
         recon = U.todense() * s[None, :] @ Vh.todense()
         np.testing.assert_allclose(recon, original_dense, rtol=1e-4, atol=1e-6)
@@ -496,8 +545,8 @@ class TestTruncatedSVDSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        U, s, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                  new_bond_label="bond")
+        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                     new_bond_label="bond")
 
         assert isinstance(U, SymmetricTensor)
         assert isinstance(Vh, SymmetricTensor)
@@ -507,8 +556,8 @@ class TestTruncatedSVDSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        U, s, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                  new_bond_label="bond")
+        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                     new_bond_label="bond")
 
         # Find bond index on U (last index)
         bond_idx = U.indices[-1]
@@ -524,8 +573,8 @@ class TestTruncatedSVDSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        _, s_sym, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                     new_bond_label="bond")
+        _, s_sym, _, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                       new_bond_label="bond")
 
         # Dense SVD of the same tensor
         dense = t.todense()
@@ -543,8 +592,8 @@ class TestTruncatedSVDSymmetric:
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
         max_chi = 2
-        U, s, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                  new_bond_label="bond", max_singular_values=max_chi)
+        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                     new_bond_label="bond", max_singular_values=max_chi)
 
         assert len(s) <= max_chi
         # Bond dimension on U and Vh should match
@@ -556,7 +605,7 @@ class TestTruncatedSVDSymmetric:
         t = _make_symmetric_3leg(u1, rng)
         original_dense = t.todense()
 
-        U, s, Vh = truncated_svd(
+        U, s, Vh, _ = truncated_svd(
             t, left_labels=["phys", "left"], right_labels=["right"],
             new_bond_label="bond",
         )
@@ -578,8 +627,8 @@ class TestTruncatedSVDSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        U, _, Vh = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                  new_bond_label="bond")
+        U, _, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
+                                     new_bond_label="bond")
 
         for tensor_out in (U, Vh):
             for key in tensor_out.blocks:
