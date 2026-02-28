@@ -66,6 +66,11 @@ packages = ["src/tnjax"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=tnjax --cov-report=term-missing --cov-report=xml"
+markers = [
+    "core: fast API and infrastructure tests",
+    "algorithm: full algorithm runs (DMRG, TRG, HOTRG, iPEPS)",
+    "slow: expensive tests (excitations, large convergence)",
+]
 
 [tool.ruff]
 line-length = 88

@@ -54,7 +54,7 @@ from tnjax import truncated_svd
 
 # Split tensor T with legs ("left", "phys", "right") along the cut
 # left_labels vs right_labels
-U, s, Vh = truncated_svd(
+U, s, Vh, s_full = truncated_svd(
     T,
     left_labels=["left", "phys"],
     right_labels=["right"],
@@ -62,8 +62,9 @@ U, s, Vh = truncated_svd(
     max_singular_values=16,
 )
 # U has legs ("left", "phys", "bond")
-# s is a 1D JAX array of singular values
+# s is a 1D JAX array of truncated singular values
 # Vh has legs ("bond", "right")
+# s_full is the complete singular value spectrum before truncation
 ```
 
 Parameters controlling truncation:
