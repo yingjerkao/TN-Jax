@@ -75,20 +75,22 @@ result = tn.contract(nodes=["A", "B"], output_labels=["a", "c"])
 
 **Cache behaviour**
 
-Results are cached by the key `(frozenset(nodes), tuple(output_labels), optimize)`.
-The cache is invalidated automatically whenever the graph structure changes
-(node added/removed, edge added/removed, tensor replaced). Two calls with the same
-nodes but different `output_labels` or different `optimize` strings receive
-independent cache entries.
+Results are cached by the key `(tuple(nodes), tuple(output_labels), optimize)`.
+Node order matters: when `output_labels` is ``None``, the output leg order depends
+on the order nodes are listed. The cache is invalidated automatically whenever the
+graph structure changes (node added/removed, edge added/removed, tensor replaced).
+Two calls with the same nodes but different `output_labels` or different `optimize`
+strings receive independent cache entries.
 
 ---
 
 ## `truncated_svd(tensor, left_labels, right_labels, ...)`
 
-SVD splits a tensor into `U, S, Vh` with an optional truncation of singular values:
+SVD splits a tensor into `U, S, Vh, S_full` with an optional truncation of
+singular values:
 
 ```python
-U, S, Vh = truncated_svd(
+U, S, Vh, S_full = truncated_svd(
     theta,
     left_labels=["v0_1", "p0"],
     right_labels=["p1", "v1_2"],
@@ -104,8 +106,9 @@ U, S, Vh = truncated_svd(
 - `max_truncation_err` — Discard singular values until cumulative truncation error
   exceeds this threshold (whichever is more restrictive with `max_singular_values`).
 
-`S` is a `DenseTensor` with a single leg labelled `new_bond_label`. Singular
-values are returned in **descending** order.
+`S` contains the **truncated** singular values in descending order. `S_full`
+contains all singular values before truncation, useful for computing truncation
+error without a second SVD.
 
 ---
 
