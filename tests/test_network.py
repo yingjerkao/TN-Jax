@@ -242,6 +242,45 @@ class TestTensorNetworkContraction:
         r2 = tn.contract()  # should come from cache
         assert r1 is r2
 
+    def test_cache_key_respects_node_order(self, u1):
+        """Cache must distinguish node orderings when output_labels=None.
+
+        When output_labels is not specified, the free-label order depends on
+        the iteration order of the node list.  Using frozenset(nodes) as the
+        cache key collapsed ['A','B'] and ['B','A'] into the same entry,
+        returning the wrong leg ordering for the second call.
+
+        Regression test for the frozenset -> tuple fix in contract().
+        """
+        charges_a = np.zeros(2, dtype=np.int32)
+        charges_b = np.zeros(3, dtype=np.int32)
+        A = DenseTensor(
+            jnp.ones((2,)),
+            (TensorIndex(u1, charges_a, FlowDirection.IN, label="leg_a"),),
+        )
+        B = DenseTensor(
+            jnp.ones((3,)),
+            (TensorIndex(u1, charges_b, FlowDirection.IN, label="leg_b"),),
+        )
+
+        tn = TensorNetwork()
+        tn.add_node("A", A)
+        tn.add_node("B", B)
+
+        # Contract in A,B order — free labels should be [leg_a, leg_b]
+        r_ab = tn.contract(nodes=["A", "B"], output_labels=None)
+        # Contract in B,A order — free labels should be [leg_b, leg_a]
+        r_ba = tn.contract(nodes=["B", "A"], output_labels=None)
+
+        # The label orders must reflect the node ordering
+        assert r_ab.labels() == ("leg_a", "leg_b")
+        assert r_ba.labels() == ("leg_b", "leg_a")
+
+        # The underlying data should be transposed relative to each other
+        np.testing.assert_allclose(
+            r_ab.todense(), r_ba.todense().T, rtol=1e-7
+        )
+
     def test_repr(self, u1):
         tn = TensorNetwork(name="test")
         r = repr(tn)
