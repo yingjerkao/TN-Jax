@@ -61,7 +61,7 @@ def trg(
     to form the new coarse tensor.
 
     The partition function estimate is tracked via log normalization:
-    ``log(Z)/N = sum_steps log(norm_step) / 4^step``.
+    ``log(Z)/N = sum_steps log(norm_step) / 2^step``.
 
     Args:
         tensor: Initial site tensor, a DenseTensor with 4 legs labeled
@@ -81,10 +81,9 @@ def trg(
 
     for step in range(config.num_steps):
         T, log_norm = _trg_step(T, config.max_bond_dim, config.svd_trunc_err)
-        # At step k, the lattice has been coarsened by 2^k in each direction.
-        # Each coarse-grained tensor represents 4^k original sites.
-        # The contribution to log(Z)/N from this step is log_norm / 4^(step+1).
-        log_norm_total = log_norm_total + log_norm / (4.0 ** (step + 1))
+        # Each TRG step halves the number of tensors (45° rotation of the
+        # lattice). The contribution to log(Z)/N from step k is log_norm / 2^(k+1).
+        log_norm_total = log_norm_total + log_norm / (2.0 ** (step + 1))
 
     return log_norm_total
 
@@ -124,8 +123,8 @@ def _trg_step(
     if svd_trunc_err is not None:
         s_np = np.array(s_h)
         total_sq = float(np.sum(s_np**2))
-        cumulative = np.cumsum(s_np[::-1]**2)
-        cutoff = np.searchsorted(cumulative, (svd_trunc_err * s_np[0])**2 * total_sq)
+        cumulative = np.cumsum(s_np[::-1] ** 2)
+        cutoff = np.searchsorted(cumulative, (svd_trunc_err * s_np[0]) ** 2 * total_sq)
         chi_h = min(chi_h, max(1, len(s_np) - cutoff))
 
     U_h = U_h[:, :chi_h]
@@ -135,8 +134,8 @@ def _trg_step(
     # Absorb sqrt(s) into both factors
     sqrt_s_h = jnp.sqrt(s_h)
     # F1[u, l, k] and F2[k, d, r]: split on bond k of dim chi_h
-    F1 = (U_h * sqrt_s_h[None, :]).reshape(d_u, d_l, chi_h)    # [u, l, k]
-    F2 = (Vh_h * sqrt_s_h[:, None]).reshape(chi_h, d_d, d_r)   # [k, d, r]
+    F1 = (U_h * sqrt_s_h[None, :]).reshape(d_u, d_l, chi_h)  # [u, l, k]
+    F2 = (Vh_h * sqrt_s_h[:, None]).reshape(chi_h, d_d, d_r)  # [k, d, r]
 
     # --- Vertical split ---
     # Reshape T to matrix: (d_u * d_r, d_d * d_l)
@@ -148,8 +147,8 @@ def _trg_step(
     if svd_trunc_err is not None:
         s_np = np.array(s_v)
         total_sq = float(np.sum(s_np**2))
-        cumulative = np.cumsum(s_np[::-1]**2)
-        cutoff = np.searchsorted(cumulative, (svd_trunc_err * s_np[0])**2 * total_sq)
+        cumulative = np.cumsum(s_np[::-1] ** 2)
+        cutoff = np.searchsorted(cumulative, (svd_trunc_err * s_np[0]) ** 2 * total_sq)
         chi_v = min(chi_v, max(1, len(s_np) - cutoff))
 
     U_v = U_v[:, :chi_v]
@@ -158,8 +157,8 @@ def _trg_step(
 
     sqrt_s_v = jnp.sqrt(s_v)
     # F3[u, r, m] and F4[m, d, l]: split on bond m of dim chi_v
-    F3 = (U_v * sqrt_s_v[None, :]).reshape(d_u, d_r, chi_v)    # [u, r, m]
-    F4 = (Vh_v * sqrt_s_v[:, None]).reshape(chi_v, d_d, d_l)   # [m, d, l]
+    F3 = (U_v * sqrt_s_v[None, :]).reshape(d_u, d_r, chi_v)  # [u, r, m]
+    F4 = (Vh_v * sqrt_s_v[:, None]).reshape(chi_v, d_d, d_l)  # [m, d, l]
 
     # --- Contract 4 half-tensors around a plaquette ---
     # Following Levin-Nave TRG convention:
@@ -174,8 +173,8 @@ def _trg_step(
     # Contract: T_new[m, k, m', k'] =
     #   sum_{u,d,l,r} F3[u,r,m] * F1[u,l,k] * F4[m',d,l] * F2[k',d,r]
     # Dimensions: m,k,m',k' are all chi → T_new shape (chi_v, chi_h, chi_v, chi_h)
-    T_new = jnp.einsum("urm,ulk,Mdl,Kdr->mKMk", F3, F1, F4, F2)
-    # T_new shape: (chi_v, chi_h, chi_v, chi_h) ~ (up, right, down, left)
+    T_new = jnp.einsum("urm,ulk,Mdl,Kdr->mMkK", F3, F1, F4, F2)
+    # T_new shape: (chi_v, chi_v, chi_h, chi_h) ~ (up, down, left, right)
 
     # Normalize to prevent exponential growth
     norm = jnp.max(jnp.abs(T_new))
@@ -217,19 +216,21 @@ def compute_ising_tensor(
     # Q[i, j] = exp(beta * J * sigma_i * sigma_j)
     Q = jnp.exp(beta * J * jnp.outer(spins, spins))
 
-    # sqrt(Q) for the decomposition
-    sqrtQ = jnp.sqrt(Q)
+    # Matrix square root of Q (NOT element-wise sqrt).
+    # Q is symmetric positive-definite, so sqrtQ @ sqrtQ = Q.
+    evals, evecs = jnp.linalg.eigh(Q)
+    sqrtQ = evecs @ jnp.diag(jnp.sqrt(evals)) @ evecs.T
 
     # Build T_{udlr} = sum_s sqrtQ[u,s] * sqrtQ[d,s] * sqrtQ[l,s] * sqrtQ[r,s]
-    # This ensures T is non-negative and the trace correctly gives Z.
+    # This ensures the trace correctly gives Z.
     T = jnp.einsum("us,ds,ls,rs->udlr", sqrtQ, sqrtQ, sqrtQ, sqrtQ)
 
     sym = U1Symmetry()
     bond_2 = np.zeros(2, dtype=np.int32)
     indices = (
-        TensorIndex(sym, bond_2, FlowDirection.IN,  label="up"),
+        TensorIndex(sym, bond_2, FlowDirection.IN, label="up"),
         TensorIndex(sym, bond_2, FlowDirection.OUT, label="down"),
-        TensorIndex(sym, bond_2, FlowDirection.IN,  label="left"),
+        TensorIndex(sym, bond_2, FlowDirection.IN, label="left"),
         TensorIndex(sym, bond_2, FlowDirection.OUT, label="right"),
     )
     return DenseTensor(T, indices)
@@ -238,28 +239,47 @@ def compute_ising_tensor(
 def ising_free_energy_exact(beta: float, J: float = 1.0) -> float:
     """Compute the exact 2D Ising free energy per site via Onsager's formula.
 
-    f = -1/beta * [ln(2) + (1/(2*pi)) * integral_0^pi ln(cosh(2*beta*J)*cosh(2*beta*J)
-                                              - sinh(2*beta*J)*cos(theta)) d theta]
+    The exact result for ln(Z)/N on the square lattice is:
 
-    This is used as a reference for testing TRG convergence.
+      ln(Z)/N = ln(2) + (1/(2*pi^2)) * int_0^pi int_0^pi
+                ln(cosh^2(2K) - sinh(2K)*(cos t1 + cos t2)) dt1 dt2
+
+    where K = beta*J. The inner integral over t2 is evaluated analytically
+    via int_0^pi ln(A - B*cos(t)) dt = pi*ln((A + sqrt(A^2-B^2))/2),
+    reducing to a single integral over t1.
+
+    Reference: Onsager, Phys. Rev. 65, 117 (1944).
 
     Args:
         beta: Inverse temperature.
         J:    Coupling constant.
 
     Returns:
-        Free energy per site (negative for ordered phase).
+        Free energy per site f = -ln(Z)/(N*beta).
     """
     if beta == 0:
         return -float(jnp.log(2.0))
 
-    # Numerical integration of the Onsager formula
-    N_pts = 10000
-    thetas = jnp.linspace(0, jnp.pi, N_pts)
-    integrand = jnp.log(
-        2 * jnp.cosh(2 * beta * J) ** 2 - 2 * float(jnp.sinh(2 * beta * J)) * jnp.cos(thetas)
-    )
-    integral = float(jnp.trapezoid(integrand, thetas)) / jnp.pi
+    K = beta * J
+    c2K = float(jnp.cosh(2 * K))
+    s2K = float(jnp.sinh(2 * K))
 
+    # Single integral derived from the Onsager double integral.
+    # Inner integral over t2 evaluated analytically:
+    #   int_0^pi ln(A - s2K*cos(t2)) dt2 = pi*ln((A + sqrt(A^2 - s2K^2))/2)
+    # where A = c2K^2 - s2K*cos(t1).
+    # Use half-step offset grid to avoid the integrable log singularity at t1=0
+    # when K = K_c (critical temperature).
+    N_pts = 10000
+    dt = np.pi / N_pts
+    t1 = jnp.linspace(dt / 2, np.pi - dt / 2, N_pts)
+
+    A = c2K**2 - s2K * jnp.cos(t1)
+    disc = A**2 - s2K**2
+    integrand = jnp.log((A + jnp.sqrt(jnp.maximum(disc, 0.0))) / 2)
+
+    # integral = (1/pi) * int_0^pi integrand dt1
+    integral = float(jnp.trapezoid(integrand, t1)) / np.pi
+    # f = -ln(Z)/(N*beta) = -ln(2)/beta - integral/(2*beta)
     free_energy = -float(jnp.log(2.0)) / beta - integral / (2 * beta)
     return float(free_energy)
