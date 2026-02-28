@@ -344,6 +344,10 @@ Adding a Python `complex` scalar (even `1+0j`) into a `float64` array
 raises `UFuncOutputCastingError` under NumPy >= 2.0. Use `.real` or an
 explicit `complex128` dtype instead.
 
+### Local test failures on macOS x86_64
+
+`uv run pytest` may fail on macOS x86_64 if jaxlib has no wheel for that
+platform.
 ## Benchmarks
 
 A CLI-driven benchmark suite measures wall-clock performance of every algorithm
@@ -391,6 +395,8 @@ uv run pytest                  # full suite
 # Lint
 uv run ruff check src/ tests/
 ```
+
+Work-in-progress design documents live in `design/`.
 
 ## Documentation
 
