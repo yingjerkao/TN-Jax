@@ -18,9 +18,9 @@ from tnjax.algorithms.hotrg import HOTRGConfig, hotrg
 from tnjax.algorithms.idmrg import (
     build_bulk_mpo_heisenberg,
     build_bulk_mpo_heisenberg_cylinder,
+    idmrg,
     iDMRGConfig,
     iDMRGResult,
-    idmrg,
 )
 from tnjax.algorithms.ipeps import (
     CTMConfig,
