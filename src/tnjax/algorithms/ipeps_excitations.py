@@ -504,8 +504,8 @@ def _build_H_and_N(
     basis_size = D ** 4 * d
     basis = _make_basis(D, d)
 
-    H_eff = np.zeros((basis_size, basis_size))
-    N_mat = np.zeros((basis_size, basis_size))
+    # Stack basis tensors into a single JAX array: (basis_size, D, D, D, D, d)
+    B_stacked = jnp.stack(basis)
 
     # Gradient of energy functional w.r.t. B
     def energy_fn(B):
@@ -515,19 +515,17 @@ def _build_H_and_N(
     def norm_fn(B):
         return _compute_norm(A, B, env, k, d)
 
-    grad_energy = jax.grad(energy_fn)
-    grad_norm = jax.grad(norm_fn)
+    # Batch-compute all gradients using vmap instead of a Python loop.
+    # Each row of the output contains the gradient for the corresponding
+    # basis vector.  Transposing gives the matrix whose m-th column is
+    # the gradient for the m-th basis vector (matching the original API).
+    H_grads = jax.vmap(jax.grad(energy_fn))(B_stacked)  # (basis_size, D, D, D, D, d)
+    N_grads = jax.vmap(jax.grad(norm_fn))(B_stacked)     # (basis_size, D, D, D, D, d)
 
-    for m in range(basis_size):
-        B_m = basis[m]
-
-        # m-th column of H_eff
-        gH = grad_energy(B_m)
-        H_eff[:, m] = np.array(gH.ravel())
-
-        # m-th column of N
-        gN = grad_norm(B_m)
-        N_mat[:, m] = np.array(gN.ravel())
+    # Reshape to (basis_size, basis_size) and transpose so that column m
+    # corresponds to the gradient for basis vector m, then transfer to host.
+    H_eff = np.array(H_grads.reshape(basis_size, basis_size).T)
+    N_mat = np.array(N_grads.reshape(basis_size, basis_size).T)
 
     return H_eff, N_mat
 
