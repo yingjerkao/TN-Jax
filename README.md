@@ -380,8 +380,13 @@ git clone https://github.com/yingjerkao/TN-Jax
 cd TN-Jax
 uv sync --all-extras --dev
 
+# Install pre-commit hooks (ruff lint + format on every commit)
+uv run pre-commit install
+
 # Run tests
-uv run pytest tests/ -v
+uv run pytest -m core          # fast core tests only
+uv run pytest -m "not slow"    # skip expensive tests
+uv run pytest                  # full suite
 
 # Lint
 uv run ruff check src/ tests/
