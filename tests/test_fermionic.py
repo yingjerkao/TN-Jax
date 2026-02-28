@@ -496,7 +496,7 @@ class TestFermionicSVD:
         t = SymmetricTensor.random_normal(indices, rng)
         original_dense = t.todense()
 
-        U, s, Vh = truncated_svd(
+        U, s, Vh, _ = truncated_svd(
             t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
         )
 
@@ -513,7 +513,7 @@ class TestFermionicSVD:
         t = SymmetricTensor.random_normal(indices, rng)
         original_dense = t.todense()
 
-        U, s, Vh = truncated_svd(
+        U, s, Vh, _ = truncated_svd(
             t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
         )
 
@@ -532,7 +532,7 @@ class TestFermionicSVD:
         t = SymmetricTensor.random_normal(indices, rng)
         original_dense = t.todense()
 
-        U, s, Vh = truncated_svd(
+        U, s, Vh, _ = truncated_svd(
             t, left_labels=["phys", "left"], right_labels=["right"],
             new_bond_label="bond",
         )
@@ -550,7 +550,7 @@ class TestFermionicSVD:
             TensorIndex(fu1, fu1.dual(charges), FlowDirection.OUT, label="col"),
         )
         t = SymmetricTensor.random_normal(indices, rng)
-        U, s, Vh = truncated_svd(
+        U, s, Vh, _ = truncated_svd(
             t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
         )
         assert isinstance(U, SymmetricTensor)
