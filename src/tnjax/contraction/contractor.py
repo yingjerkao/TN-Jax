@@ -15,7 +15,7 @@ with the JAX backend.
 Lower-level API::
 
     contract_with_subscripts(tensors, subscripts, output_indices, optimize) -> Tensor
-    truncated_svd(tensor, left_labels, right_labels, ...) -> (U, s, Vh)
+    truncated_svd(tensor, left_labels, right_labels, ...) -> (U, s, Vh, s_full)
     qr_decompose(tensor, left_labels, right_labels, ...) -> (Q, R)
 """
 
@@ -584,11 +584,14 @@ def _truncated_svd_symmetric(
     max_truncation_err: float | None,
     new_bond_label: Label,
     normalize: bool,
-) -> tuple[SymmetricTensor, jax.Array, SymmetricTensor]:
+) -> tuple[SymmetricTensor, jax.Array, SymmetricTensor, jax.Array]:
     """Block-diagonal SVD for SymmetricTensor.
 
     Each charge sector is decomposed independently, then singular values
     are merged and truncated globally.
+
+    Returns ``(U, s_truncated, Vh, s_full)`` where *s_full* contains all
+    singular values (sorted descending) before truncation.
     """
     all_labels = tensor.labels()
     label_to_axis = {lbl: i for i, lbl in enumerate(all_labels)}
@@ -690,6 +693,9 @@ def _truncated_svd_symmetric(
 
     # Sort descending by singular value
     all_sv_pairs.sort(key=lambda x: -x[0])
+
+    # Preserve the full singular-value spectrum before truncation
+    s_full = jnp.array([v for v, _, _ in all_sv_pairs])
 
     # Determine global keep count
     n_total = len(all_sv_pairs)
@@ -794,7 +800,7 @@ def _truncated_svd_symmetric(
     U_tensor = SymmetricTensor(U_blocks, U_indices)
     Vh_tensor = SymmetricTensor(Vh_blocks, Vh_indices)
 
-    return U_tensor, s_final, Vh_tensor
+    return U_tensor, s_final, Vh_tensor, s_full
 
 
 def _qr_symmetric(
@@ -956,7 +962,7 @@ def truncated_svd(
     max_singular_values: int | None = None,
     max_truncation_err: float | None = None,
     normalize: bool = False,
-) -> tuple[Tensor, jax.Array, Tensor]:
+) -> tuple[Tensor, jax.Array, Tensor, jax.Array]:
     """Reshape tensor into matrix, compute SVD, truncate, reshape back.
 
     The tensor is first reshaped into a matrix by grouping left_labels as
@@ -986,10 +992,13 @@ def truncated_svd(
         normalize:            Normalize singular values to sum to 1.
 
     Returns:
-        ``(U_tensor, singular_values, Vh_tensor)``
+        ``(U_tensor, singular_values, Vh_tensor, singular_values_full)``
         -- U has labels ``(left_labels..., new_bond_label)``.
         Vh has labels ``(new_bond_label, right_labels...)``.
-        singular_values is a 1-D JAX float array.
+        singular_values is a 1-D JAX float array (truncated).
+        singular_values_full is a 1-D JAX float array containing **all**
+        singular values before truncation (length = min(left_dim, right_dim)),
+        useful for computing truncation error without a second SVD.
 
     Raises:
         ValueError: If left_labels + right_labels don't cover all tensor labels.
@@ -1037,6 +1046,9 @@ def truncated_svd(
 
     # SVD (not JIT-able at this level due to dynamic truncation)
     U, s, Vh = jnp.linalg.svd(matrix, full_matrices=False)
+
+    # Preserve the full singular-value spectrum before truncation
+    s_full = s
 
     # Determine truncation cutoff
     s_np = np.array(s)
@@ -1098,7 +1110,7 @@ def truncated_svd(
     U_tensor = DenseTensor(U_dense, U_indices)
     Vh_tensor = DenseTensor(Vh_dense, Vh_indices)
 
-    return U_tensor, s, Vh_tensor
+    return U_tensor, s, Vh_tensor, s_full
 
 
 # ---------- QR Decomposition ----------
