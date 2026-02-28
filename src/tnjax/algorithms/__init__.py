@@ -1,4 +1,4 @@
-"""Tensor network algorithms: DMRG, TRG, HOTRG, iPEPS."""
+"""Tensor network algorithms: DMRG, iDMRG, TRG, HOTRG, iPEPS."""
 
 from tnjax.algorithms.auto_mpo import (
     AutoMPO,
@@ -15,7 +15,29 @@ from tnjax.algorithms.dmrg import (
     dmrg,
 )
 from tnjax.algorithms.hotrg import HOTRGConfig, hotrg
-from tnjax.algorithms.ipeps import CTMConfig, CTMEnvironment, ctm, ipeps, iPEPSConfig
+from tnjax.algorithms.idmrg import (
+    build_bulk_mpo_heisenberg,
+    build_bulk_mpo_heisenberg_cylinder,
+    idmrg,
+    iDMRGConfig,
+    iDMRGResult,
+)
+from tnjax.algorithms.ipeps import (
+    CTMConfig,
+    CTMEnvironment,
+    compute_energy_ctm_2site,
+    ctm,
+    ctm_2site,
+    ipeps,
+    iPEPSConfig,
+    optimize_gs_ad,
+)
+from tnjax.algorithms.ipeps_excitations import (
+    ExcitationConfig,
+    ExcitationResult,
+    compute_excitations,
+    make_momentum_path,
+)
 from tnjax.algorithms.trg import (
     TRGConfig,
     compute_ising_tensor,
@@ -36,6 +58,12 @@ __all__ = [
     "dmrg",
     "build_mpo_heisenberg",
     "build_random_mps",
+    # iDMRG
+    "iDMRGConfig",
+    "iDMRGResult",
+    "idmrg",
+    "build_bulk_mpo_heisenberg",
+    "build_bulk_mpo_heisenberg_cylinder",
     # TRG
     "TRGConfig",
     "trg",
@@ -50,4 +78,12 @@ __all__ = [
     "CTMEnvironment",
     "ipeps",
     "ctm",
+    "ctm_2site",
+    "compute_energy_ctm_2site",
+    "optimize_gs_ad",
+    # iPEPS Excitations
+    "ExcitationConfig",
+    "ExcitationResult",
+    "compute_excitations",
+    "make_momentum_path",
 ]
