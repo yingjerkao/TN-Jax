@@ -881,6 +881,29 @@ def _simple_update_2site_vertical(
     return A_new, B_new, lambdas_new
 
 
+def _ctm_sweep(
+    env: CTMEnvironment,
+    a: jax.Array,
+    chi: int,
+    renormalize: bool,
+) -> CTMEnvironment:
+    """One full CTM sweep: left, right, top, bottom moves + optional renormalize."""
+    env = _ctm_left_move(env, a, chi)
+    env = _ctm_right_move(env, a, chi)
+    env = _ctm_top_move(env, a, chi)
+    env = _ctm_bottom_move(env, a, chi)
+    if renormalize:
+        env = _renormalize_env(env)
+    return env
+
+
+def _ctm_sv_diff(sv_new: jax.Array, sv_old: jax.Array) -> jax.Array:
+    """Compute max absolute difference between normalized singular value vectors."""
+    sv1 = sv_new / (jnp.sum(sv_new) + 1e-15)
+    sv2 = sv_old / (jnp.sum(sv_old) + 1e-15)
+    return jnp.max(jnp.abs(sv1 - sv2))
+
+
 def ctm(
     A: jax.Array,
     config: CTMConfig,
@@ -891,6 +914,9 @@ def ctm(
     Runs the CTM algorithm (Corboz/Orús scheme) until convergence.
     The input A is the double-layer tensor A * A^* combined, or the
     single-layer A from which the doubled tensor is computed.
+
+    The iteration loop uses ``jax.lax.while_loop`` so that the entire
+    convergence procedure can be JIT-compiled without host sync.
 
     Args:
         A:           Site tensor (single layer) of PEPS.
@@ -919,30 +945,29 @@ def ctm(
     else:
         env = _initialize_ctm_env(a, chi)
 
-    # CTM iteration
-    prev_singular_values = None
-    for iteration in range(config.max_iter):
-        env = _ctm_left_move(env, a, chi)
-        env = _ctm_right_move(env, a, chi)
-        env = _ctm_top_move(env, a, chi)
-        env = _ctm_bottom_move(env, a, chi)
+    max_iter = config.max_iter
+    conv_tol = config.conv_tol
+    renormalize = config.renormalize
 
-        if config.renormalize:
-            env = _renormalize_env(env)
+    # Initial singular values (zeros — first iteration never converges)
+    prev_sv = jnp.zeros(min(chi, env.C1.shape[0]), dtype=env.C1.dtype)
 
-        # Check convergence via singular values of C1
-        current_sv = jnp.linalg.svd(env.C1, compute_uv=False)
-        if prev_singular_values is not None:
-            # Normalize before comparison
-            sv1 = current_sv / (jnp.sum(current_sv) + 1e-15)
-            sv2 = prev_singular_values / (jnp.sum(prev_singular_values) + 1e-15)
-            min_len = min(len(sv1), len(sv2))
-            diff = float(jnp.max(jnp.abs(sv1[:min_len] - sv2[:min_len])))
-            if diff < config.conv_tol:
-                break
+    # Carry: (env, prev_sv, iteration, converged)
+    init_carry = (env, prev_sv, jnp.array(0, dtype=jnp.int32), jnp.bool_(False))
 
-        prev_singular_values = current_sv
+    def cond_fn(carry):
+        _, _, iteration, converged = carry
+        return ~converged & (iteration < max_iter)
 
+    def body_fn(carry):
+        env_i, prev_sv_i, iteration, _ = carry
+        env_i = _ctm_sweep(env_i, a, chi, renormalize)
+        current_sv = jnp.linalg.svd(env_i.C1, compute_uv=False)
+        diff = _ctm_sv_diff(current_sv, prev_sv_i)
+        converged = diff < conv_tol
+        return (env_i, current_sv, iteration + 1, converged)
+
+    env, _, _, _ = jax.lax.while_loop(cond_fn, body_fn, init_carry)
     return env
 
 
@@ -1291,6 +1316,33 @@ def _ctm_bottom_move_2site(
     )
 
 
+def _ctm_2site_sweep(
+    env_A: CTMEnvironment,
+    env_B: CTMEnvironment,
+    a_A: jax.Array,
+    a_B: jax.Array,
+    chi: int,
+    renormalize: bool,
+) -> tuple[CTMEnvironment, CTMEnvironment]:
+    """One full 2-site CTM sweep: L/R/T/B moves for both sublattices + renormalize."""
+    # Left moves
+    env_A = _ctm_left_move_2site(env_A, env_B, a_B, chi)
+    env_B = _ctm_left_move_2site(env_B, env_A, a_A, chi)
+    # Right moves
+    env_A = _ctm_right_move_2site(env_A, env_B, a_B, chi)
+    env_B = _ctm_right_move_2site(env_B, env_A, a_A, chi)
+    # Top moves
+    env_A = _ctm_top_move_2site(env_A, env_B, a_B, chi)
+    env_B = _ctm_top_move_2site(env_B, env_A, a_A, chi)
+    # Bottom moves
+    env_A = _ctm_bottom_move_2site(env_A, env_B, a_B, chi)
+    env_B = _ctm_bottom_move_2site(env_B, env_A, a_A, chi)
+    if renormalize:
+        env_A = _renormalize_env(env_A)
+        env_B = _renormalize_env(env_B)
+    return env_A, env_B
+
+
 def ctm_2site(
     A: jax.Array,
     B: jax.Array,
@@ -1301,6 +1353,9 @@ def ctm_2site(
     On a checkerboard, all neighbors of A are B and vice versa. Each
     absorption move for env_A uses B's double-layer tensor and T's from
     env_B, and vice versa.
+
+    The iteration loop uses ``jax.lax.while_loop`` so that the entire
+    convergence procedure can be JIT-compiled without host sync.
 
     Args:
         A: Site tensor for sublattice A, shape (D, D, D, D, d).
@@ -1324,43 +1379,37 @@ def ctm_2site(
     env_A = _initialize_ctm_env(a_A, chi)
     env_B = _initialize_ctm_env(a_B, chi)
 
-    prev_sv_A = None
-    prev_sv_B = None
-    for iteration in range(config.max_iter):
-        # Left moves
-        env_A = _ctm_left_move_2site(env_A, env_B, a_B, chi)
-        env_B = _ctm_left_move_2site(env_B, env_A, a_A, chi)
-        # Right moves
-        env_A = _ctm_right_move_2site(env_A, env_B, a_B, chi)
-        env_B = _ctm_right_move_2site(env_B, env_A, a_A, chi)
-        # Top moves
-        env_A = _ctm_top_move_2site(env_A, env_B, a_B, chi)
-        env_B = _ctm_top_move_2site(env_B, env_A, a_A, chi)
-        # Bottom moves
-        env_A = _ctm_bottom_move_2site(env_A, env_B, a_B, chi)
-        env_B = _ctm_bottom_move_2site(env_B, env_A, a_A, chi)
+    max_iter = config.max_iter
+    conv_tol = config.conv_tol
+    renormalize = config.renormalize
 
-        if config.renormalize:
-            env_A = _renormalize_env(env_A)
-            env_B = _renormalize_env(env_B)
+    # Initial singular values (zeros — first iteration never converges)
+    sv_size_A = min(chi, env_A.C1.shape[0])
+    sv_size_B = min(chi, env_B.C1.shape[0])
+    prev_sv_A = jnp.zeros(sv_size_A, dtype=env_A.C1.dtype)
+    prev_sv_B = jnp.zeros(sv_size_B, dtype=env_B.C1.dtype)
 
-        # Convergence check via SVs of C1 for both sublattices
-        sv_A = jnp.linalg.svd(env_A.C1, compute_uv=False)
-        sv_B = jnp.linalg.svd(env_B.C1, compute_uv=False)
-        if prev_sv_A is not None:
-            sv_A_n = sv_A / (jnp.sum(sv_A) + 1e-15)
-            sv_B_n = sv_B / (jnp.sum(sv_B) + 1e-15)
-            pA = prev_sv_A / (jnp.sum(prev_sv_A) + 1e-15)
-            pB = prev_sv_B / (jnp.sum(prev_sv_B) + 1e-15)
-            min_A = min(len(sv_A_n), len(pA))
-            min_B = min(len(sv_B_n), len(pB))
-            diff_A = float(jnp.max(jnp.abs(sv_A_n[:min_A] - pA[:min_A])))
-            diff_B = float(jnp.max(jnp.abs(sv_B_n[:min_B] - pB[:min_B])))
-            if max(diff_A, diff_B) < config.conv_tol:
-                break
-        prev_sv_A = sv_A
-        prev_sv_B = sv_B
+    # Carry: (env_A, env_B, prev_sv_A, prev_sv_B, iteration, converged)
+    init_carry = (
+        env_A, env_B, prev_sv_A, prev_sv_B,
+        jnp.array(0, dtype=jnp.int32), jnp.bool_(False),
+    )
 
+    def cond_fn(carry):
+        _, _, _, _, iteration, converged = carry
+        return ~converged & (iteration < max_iter)
+
+    def body_fn(carry):
+        eA, eB, psA, psB, iteration, _ = carry
+        eA, eB = _ctm_2site_sweep(eA, eB, a_A, a_B, chi, renormalize)
+        sv_A = jnp.linalg.svd(eA.C1, compute_uv=False)
+        sv_B = jnp.linalg.svd(eB.C1, compute_uv=False)
+        diff_A = _ctm_sv_diff(sv_A, psA)
+        diff_B = _ctm_sv_diff(sv_B, psB)
+        converged = jnp.maximum(diff_A, diff_B) < conv_tol
+        return (eA, eB, sv_A, sv_B, iteration + 1, converged)
+
+    env_A, env_B, _, _, _, _ = jax.lax.while_loop(cond_fn, body_fn, init_carry)
     return env_A, env_B
 
 
