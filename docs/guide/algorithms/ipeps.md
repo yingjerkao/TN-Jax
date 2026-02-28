@@ -33,7 +33,10 @@ C4 --- T3 --- C3
 ```
 
 CTM iteratively absorbs rows and columns until the corner singular values
-converge.
+converge. The projectors used to truncate the enlarged corners are built
+from an eigendecomposition (`eigh`) of the half-row/half-column density
+matrices. For AD-based optimization, use `truncated_svd_ad` instead
+(see {doc}`ad_excitations`).
 
 ## Configuration
 
@@ -50,11 +53,19 @@ ctm_config = CTMConfig(
 config = iPEPSConfig(
     max_bond_dim=2,            # PEPS virtual bond dimension D
     num_imaginary_steps=100,   # imaginary time evolution steps
-    dt=0.01,                   # time step size
+    dt=0.05,                   # time step size
     ctm=ctm_config,
     gate_order="sequential",
 )
 ```
+
+### Choosing `dt`
+
+Larger time steps (`dt=0.1`–`0.3`) converge faster but can overshoot;
+smaller steps (`dt=0.01`) are safer but need more iterations. A good
+strategy is to start with `dt=0.1` for quick exploration and reduce it
+for final production runs. The 2-site unit cell often benefits from
+larger `dt` because the two independent tensors converge more slowly.
 
 ## Example -- 2D Heisenberg model
 

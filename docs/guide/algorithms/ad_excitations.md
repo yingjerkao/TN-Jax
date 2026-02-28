@@ -13,6 +13,10 @@ in `tnjax.algorithms.ad_utils`.
 
 ### 1. Custom truncated SVD (`truncated_svd_ad`)
 
+The standard CTM (used for simple-update iPEPS) builds projectors via
+`eigh`. For AD-based optimization and excitations, the CTM instead uses
+`truncated_svd_ad`, which provides a custom VJP with two key fixes:
+
 The standard SVD adjoint has two failure modes:
 
 - **Degenerate singular values**: the factor $1/(s_i^2 - s_j^2)$ diverges.
