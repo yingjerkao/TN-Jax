@@ -665,7 +665,7 @@ class TestIPEPS2Site:
         """2-site D=4 iPEPS should give E < -0.66 (literature ~-0.667)."""
         config = iPEPSConfig(
             max_bond_dim=4,
-            num_imaginary_steps=200,
+            num_imaginary_steps=400,
             dt=0.3,
             ctm=CTMConfig(chi=20, max_iter=60),
             unit_cell="2site",

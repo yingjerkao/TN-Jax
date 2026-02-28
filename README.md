@@ -253,12 +253,12 @@ gate = jnp.einsum("ij,kl->ikjl", Sz, Sz) \
 config = iPEPSConfig(
     max_bond_dim=2,
     num_imaginary_steps=200,
-    dt=0.05,
+    dt=0.3,
     ctm=CTMConfig(chi=10, max_iter=40),
     unit_cell="2site",
 )
 energy, peps, (env_A, env_B) = ipeps(gate, None, config)
-print(f"Energy per site: {energy:.6f}")  # ~ -0.6
+print(f"Energy per site: {energy:.6f}")  # ~ -0.65
 ```
 
 ## iPEPS AD Optimization and Excitations
