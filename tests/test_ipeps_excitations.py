@@ -346,3 +346,51 @@ class TestMomentumPath:
         """Unknown path type should raise ValueError."""
         with pytest.raises(ValueError, match="Unknown path_type"):
             make_momentum_path("invalid_type")
+
+
+# ---------------------------------------------------------------------------
+# Slow benchmark: Heisenberg excitation dispersion
+# ---------------------------------------------------------------------------
+
+
+class TestExcitationBenchmark:
+    def test_heisenberg_excitation_dispersion(self, heisenberg_gate):
+        """Verify excitation dispersion for 2D Heisenberg AFM (D=2, chi=16).
+
+        Checks that the excitation spectrum is qualitatively correct:
+        positive excitation energies at nonzero momenta, with a minimum
+        near Gamma and higher energies at the zone boundary.
+        """
+        # 1. Converge ground state
+        config = iPEPSConfig(
+            max_bond_dim=2,
+            ctm=CTMConfig(chi=16, max_iter=60),
+            gs_num_steps=100,
+            gs_learning_rate=1e-3,
+        )
+        A_opt, env, E_gs = optimize_gs_ad(heisenberg_gate, None, config)
+
+        # 2. Compute excitations at high-symmetry k-points
+        momenta = [(0.0, 0.0), (np.pi, 0.0), (np.pi, np.pi)]
+        exc_config = ExcitationConfig(num_excitations=2, null_space_tol=1e-2)
+        result = compute_excitations(
+            A_opt, env, heisenberg_gate, E_gs, momenta, exc_config
+        )
+
+        # 3. Assertions
+        assert np.all(np.isfinite(result.energies)), (
+            f"Non-finite excitation energies: {result.energies}"
+        )
+
+        E_gamma = result.energies[0, 0]  # lowest at Gamma
+        E_X = result.energies[1, 0]  # lowest at X=(pi,0)
+        E_M = result.energies[2, 0]  # lowest at M=(pi,pi)
+
+        assert E_X > 0.1, f"Excitation at X should be positive, got {E_X}"
+        assert E_M > 0.1, f"Excitation at M should be positive, got {E_M}"
+        assert E_gamma < E_X, (
+            f"Dispersion minimum should be near Gamma: E_gamma={E_gamma}, E_X={E_X}"
+        )
+        assert E_gamma < E_M, (
+            f"Dispersion minimum should be near Gamma: E_gamma={E_gamma}, E_M={E_M}"
+        )
