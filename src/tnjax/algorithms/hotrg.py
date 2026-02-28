@@ -92,6 +92,7 @@ def hotrg(
     return log_norm_total
 
 
+@jax.jit(static_argnums=(1,))
 def _hotrg_step_horizontal(
     T: jax.Array,
     max_bond_dim: int,
@@ -154,6 +155,7 @@ def _hotrg_step_horizontal(
     return T_new, log_norm
 
 
+@jax.jit(static_argnums=(1,))
 def _hotrg_step_vertical(
     T: jax.Array,
     max_bond_dim: int,
@@ -207,6 +209,7 @@ def _hotrg_step_vertical(
     return T_new, log_norm
 
 
+@jax.jit(static_argnums=(1, 2))
 def _compute_hosvd_isometry(
     M: jax.Array,
     axis: int,
