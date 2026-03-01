@@ -55,6 +55,10 @@ class TestIPEPSConfig:
         assert cfg.num_imaginary_steps == 50
         assert cfg.dt == 0.05
 
+    def test_su_init_default_false(self):
+        cfg = iPEPSConfig()
+        assert cfg.su_init is False
+
 
 class TestCTMEnvironment:
     def test_named_tuple_fields(self):

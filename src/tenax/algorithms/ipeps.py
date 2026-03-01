@@ -64,6 +64,10 @@ class iPEPSConfig:
         ctm:                   CTM configuration for environment computation.
         svd_trunc_err:         SVD truncation error for simple update.
         gate_order:            Order of bond updates: "sequential" or "random".
+        su_init:               If True, ``optimize_gs_ad`` initializes the site
+                               tensor via simple update (``ipeps()``) instead of
+                               random initialization.  Ignored when ``A_init``
+                               is provided explicitly.
     """
 
     max_bond_dim: int = 2
@@ -78,6 +82,7 @@ class iPEPSConfig:
     gs_learning_rate: float = 1e-3
     gs_num_steps: int = 200
     gs_conv_tol: float = 1e-8
+    su_init: bool = False
 
 
 class CTMEnvironment(NamedTuple):
@@ -1739,7 +1744,9 @@ def optimize_gs_ad(
     Args:
         hamiltonian_gate: 2-site Hamiltonian of shape ``(d, d, d, d)``.
         A_init:           Initial site tensor ``(D, D, D, D, d)``, or None
-                          for random initialization.
+                          for random initialization.  When ``None`` and
+                          ``config.su_init`` is ``True``, the tensor is
+                          initialized via simple update (``ipeps()``).
         config:           iPEPSConfig with AD optimization settings.
 
     Returns:
@@ -1756,8 +1763,12 @@ def optimize_gs_ad(
 
     # Initialize site tensor
     if A_init is None:
-        key = jax.random.PRNGKey(0)
-        A = jax.random.normal(key, (D, D, D, D, d_phys))
+        if config.su_init:
+            _, su_peps, _ = ipeps(gate, None, config)
+            A = su_peps.get_tensor((0, 0)).todense()
+        else:
+            key = jax.random.PRNGKey(0)
+            A = jax.random.normal(key, (D, D, D, D, d_phys))
     else:
         A = jnp.array(A_init)
     A = A / (jnp.linalg.norm(A) + 1e-10)
