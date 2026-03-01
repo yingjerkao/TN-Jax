@@ -6,7 +6,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 
-from tnjax.core.symmetry import (
+from tenax.core.symmetry import (
     BaseNonAbelianSymmetry,
     BaseSymmetry,
     U1Symmetry,
@@ -210,11 +210,20 @@ class TestBaseNonAbelianSymmetry:
 
     def test_stub_methods_required(self):
         """Subclass must implement all abstract methods."""
+
         class Incomplete(BaseNonAbelianSymmetry):
-            def fuse(self, a, b): return a + b
-            def dual(self, a): return -a
-            def identity(self): return 0
-            def n_values(self): return None
+            def fuse(self, a, b):
+                return a + b
+
+            def dual(self, a):
+                return -a
+
+            def identity(self):
+                return 0
+
+            def n_values(self):
+                return None
+
             # Missing: recoupling_coefficients, allowed_fusions
 
         with pytest.raises(TypeError):
@@ -222,11 +231,19 @@ class TestBaseNonAbelianSymmetry:
 
     def test_concrete_subclass(self):
         """A fully implemented subclass should instantiate."""
+
         class ConcreteNonAbelian(BaseNonAbelianSymmetry):
-            def fuse(self, a, b): return a + b
-            def dual(self, a): return -a
-            def identity(self): return 0
-            def n_values(self): return None
+            def fuse(self, a, b):
+                return a + b
+
+            def dual(self, a):
+                return -a
+
+            def identity(self):
+                return 0
+
+            def n_values(self):
+                return None
 
             def recoupling_coefficients(self, j1, j2, j3):
                 return np.ones((1,))

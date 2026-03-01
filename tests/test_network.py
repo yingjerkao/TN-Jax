@@ -5,10 +5,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor, SymmetricTensor
-from tnjax.network.network import TensorNetwork, build_mps, build_peps
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry
+from tenax.core.tensor import DenseTensor, SymmetricTensor
+from tenax.network.network import TensorNetwork, build_mps, build_peps
 
 
 def make_tensor(u1, shape, labels, flows=None, seed=0):
@@ -90,14 +90,20 @@ class TestTensorNetworkEdges:
     def test_connect_and_disconnect(self, u1):
         tn = TensorNetwork()
         charges = np.zeros(3, dtype=np.int32)
-        A = DenseTensor(jnp.ones((3, 3)), (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="bond"),
-            TensorIndex(u1, charges, FlowDirection.IN,  label="phys_a"),
-        ))
-        B = DenseTensor(jnp.ones((3, 3)), (
-            TensorIndex(u1, charges, FlowDirection.OUT, label="bond"),
-            TensorIndex(u1, charges, FlowDirection.IN,  label="phys_b"),
-        ))
+        A = DenseTensor(
+            jnp.ones((3, 3)),
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="bond"),
+                TensorIndex(u1, charges, FlowDirection.IN, label="phys_a"),
+            ),
+        )
+        B = DenseTensor(
+            jnp.ones((3, 3)),
+            (
+                TensorIndex(u1, charges, FlowDirection.OUT, label="bond"),
+                TensorIndex(u1, charges, FlowDirection.IN, label="phys_b"),
+            ),
+        )
         tn.add_node("A", A)
         tn.add_node("B", B)
         tn.connect("A", "bond", "B", "bond")
@@ -109,13 +115,13 @@ class TestTensorNetworkEdges:
     def test_connect_incompatible_raises(self, u1):
         tn = TensorNetwork()
         charges = np.zeros(3, dtype=np.int32)
-        A = DenseTensor(jnp.ones((3,)), (
-            TensorIndex(u1, charges, FlowDirection.IN, label="leg"),
-        ))
+        A = DenseTensor(
+            jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="leg"),)
+        )
         charges2 = np.zeros(4, dtype=np.int32)  # different dimension
-        B = DenseTensor(jnp.ones((4,)), (
-            TensorIndex(u1, charges2, FlowDirection.OUT, label="leg"),
-        ))
+        B = DenseTensor(
+            jnp.ones((4,)), (TensorIndex(u1, charges2, FlowDirection.OUT, label="leg"),)
+        )
         tn.add_node("A", A)
         tn.add_node("B", B)
         with pytest.raises(ValueError, match="Incompatible"):
@@ -124,8 +130,12 @@ class TestTensorNetworkEdges:
     def test_connect_missing_label_raises(self, u1):
         tn = TensorNetwork()
         charges = np.zeros(3, dtype=np.int32)
-        A = DenseTensor(jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="a"),))
-        B = DenseTensor(jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.OUT, label="b"),))
+        A = DenseTensor(
+            jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="a"),)
+        )
+        B = DenseTensor(
+            jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.OUT, label="b"),)
+        )
         tn.add_node("A", A)
         tn.add_node("B", B)
         with pytest.raises(KeyError):
@@ -134,14 +144,20 @@ class TestTensorNetworkEdges:
     def test_connect_by_shared_label(self, u1):
         tn = TensorNetwork()
         charges = np.zeros(3, dtype=np.int32)
-        A = DenseTensor(jnp.ones((3, 3)), (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="shared"),
-            TensorIndex(u1, charges, FlowDirection.IN,  label="phys_a"),
-        ))
-        B = DenseTensor(jnp.ones((3, 3)), (
-            TensorIndex(u1, charges, FlowDirection.OUT, label="shared"),
-            TensorIndex(u1, charges, FlowDirection.IN,  label="phys_b"),
-        ))
+        A = DenseTensor(
+            jnp.ones((3, 3)),
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="shared"),
+                TensorIndex(u1, charges, FlowDirection.IN, label="phys_a"),
+            ),
+        )
+        B = DenseTensor(
+            jnp.ones((3, 3)),
+            (
+                TensorIndex(u1, charges, FlowDirection.OUT, label="shared"),
+                TensorIndex(u1, charges, FlowDirection.IN, label="phys_b"),
+            ),
+        )
         tn.add_node("A", A)
         tn.add_node("B", B)
         count = tn.connect_by_shared_label("A", "B")
@@ -151,8 +167,12 @@ class TestTensorNetworkEdges:
     def test_connect_by_shared_label_no_shared_raises(self, u1):
         tn = TensorNetwork()
         charges = np.zeros(3, dtype=np.int32)
-        A = DenseTensor(jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="a"),))
-        B = DenseTensor(jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="b"),))
+        A = DenseTensor(
+            jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="a"),)
+        )
+        B = DenseTensor(
+            jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="b"),)
+        )
         tn.add_node("A", A)
         tn.add_node("B", B)
         with pytest.raises(ValueError, match="No shared"):
@@ -161,14 +181,20 @@ class TestTensorNetworkEdges:
     def test_open_legs(self, u1):
         tn = TensorNetwork()
         charges = np.zeros(3, dtype=np.int32)
-        A = DenseTensor(jnp.ones((3, 3)), (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="shared"),
-            TensorIndex(u1, charges, FlowDirection.IN,  label="phys"),
-        ))
-        B = DenseTensor(jnp.ones((3, 3)), (
-            TensorIndex(u1, charges, FlowDirection.OUT, label="shared"),
-            TensorIndex(u1, charges, FlowDirection.IN,  label="phys2"),
-        ))
+        A = DenseTensor(
+            jnp.ones((3, 3)),
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="shared"),
+                TensorIndex(u1, charges, FlowDirection.IN, label="phys"),
+            ),
+        )
+        B = DenseTensor(
+            jnp.ones((3, 3)),
+            (
+                TensorIndex(u1, charges, FlowDirection.OUT, label="shared"),
+                TensorIndex(u1, charges, FlowDirection.IN, label="phys2"),
+            ),
+        )
         tn.add_node("A", A)
         tn.add_node("B", B)
         tn.connect_by_shared_label("A", "B")
@@ -180,7 +206,9 @@ class TestTensorNetworkEdges:
     def test_relabel_bond(self, u1):
         tn = TensorNetwork()
         charges = np.zeros(3, dtype=np.int32)
-        A = DenseTensor(jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="old"),))
+        A = DenseTensor(
+            jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="old"),)
+        )
         tn.add_node("A", A)
         tn.relabel_bond("A", "old", "new")
         assert "new" in tn.get_tensor("A").labels()
@@ -188,8 +216,12 @@ class TestTensorNetworkEdges:
     def test_cache_invalidated_on_connect(self, u1):
         tn = TensorNetwork()
         charges = np.zeros(3, dtype=np.int32)
-        A = DenseTensor(jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="a"),))
-        B = DenseTensor(jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.OUT, label="a"),))
+        A = DenseTensor(
+            jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="a"),)
+        )
+        B = DenseTensor(
+            jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.OUT, label="a"),)
+        )
         tn.add_node("A", A)
         tn.add_node("B", B)
 
@@ -220,7 +252,7 @@ class TestTensorNetworkContraction:
         charges = np.zeros(3, dtype=np.int32)
         data = jnp.array([1.0, 2.0, 3.0])
 
-        A = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN,  label="i"),))
+        A = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN, label="i"),))
         B = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.OUT, label="i"),))
 
         tn = TensorNetwork()
@@ -235,7 +267,9 @@ class TestTensorNetworkContraction:
     def test_cache_hit(self, u1):
         tn = TensorNetwork()
         charges = np.zeros(4, dtype=np.int32)
-        A = DenseTensor(jnp.ones((4,)), (TensorIndex(u1, charges, FlowDirection.IN, label="x"),))
+        A = DenseTensor(
+            jnp.ones((4,)), (TensorIndex(u1, charges, FlowDirection.IN, label="x"),)
+        )
         tn.add_node("A", A)
 
         r1 = tn.contract()
@@ -277,9 +311,7 @@ class TestTensorNetworkContraction:
         assert r_ba.labels() == ("leg_b", "leg_a")
 
         # The underlying data should be transposed relative to each other
-        np.testing.assert_allclose(
-            r_ab.todense(), r_ba.todense().T, rtol=1e-7
-        )
+        np.testing.assert_allclose(r_ab.todense(), r_ba.todense().T, rtol=1e-7)
 
     def test_repr(self, u1):
         tn = TensorNetwork(name="test")
@@ -298,21 +330,29 @@ class TestBuildMPS:
         for i in range(3):
             if i == 0:
                 indices = (
-                    TensorIndex(u1, charges_phys, FlowDirection.IN,  label=f"p{i}"),
-                    TensorIndex(u1, charges_bond, FlowDirection.OUT, label=f"v{i}_{i+1}"),
+                    TensorIndex(u1, charges_phys, FlowDirection.IN, label=f"p{i}"),
+                    TensorIndex(
+                        u1, charges_bond, FlowDirection.OUT, label=f"v{i}_{i + 1}"
+                    ),
                 )
                 data = jax.random.normal(jax.random.PRNGKey(i), (2, 4))
             elif i == 2:
                 indices = (
-                    TensorIndex(u1, charges_bond, FlowDirection.IN,  label=f"v{i-1}_{i}"),
-                    TensorIndex(u1, charges_phys, FlowDirection.IN,  label=f"p{i}"),
+                    TensorIndex(
+                        u1, charges_bond, FlowDirection.IN, label=f"v{i - 1}_{i}"
+                    ),
+                    TensorIndex(u1, charges_phys, FlowDirection.IN, label=f"p{i}"),
                 )
                 data = jax.random.normal(jax.random.PRNGKey(i), (4, 2))
             else:
                 indices = (
-                    TensorIndex(u1, charges_bond, FlowDirection.IN,  label=f"v{i-1}_{i}"),
-                    TensorIndex(u1, charges_phys, FlowDirection.IN,  label=f"p{i}"),
-                    TensorIndex(u1, charges_bond, FlowDirection.OUT, label=f"v{i}_{i+1}"),
+                    TensorIndex(
+                        u1, charges_bond, FlowDirection.IN, label=f"v{i - 1}_{i}"
+                    ),
+                    TensorIndex(u1, charges_phys, FlowDirection.IN, label=f"p{i}"),
+                    TensorIndex(
+                        u1, charges_bond, FlowDirection.OUT, label=f"v{i}_{i + 1}"
+                    ),
                 )
                 data = jax.random.normal(jax.random.PRNGKey(i), (4, 2, 4))
             tensors.append(DenseTensor(data, indices))
@@ -333,7 +373,9 @@ class TestCacheMutationFuzz:
     def _make_vec(self, u1, label, scale=1.0, seed=0, dim=3):
         charges = np.zeros(dim, dtype=np.int32)
         data = jax.random.normal(jax.random.PRNGKey(seed), (dim,)) * scale
-        return DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN, label=label),))
+        return DenseTensor(
+            data, (TensorIndex(u1, charges, FlowDirection.IN, label=label),)
+        )
 
     def test_replace_tensor_invalidates_cache(self, u1):
         """After replace_tensor the cache must not return the old result."""
@@ -345,7 +387,7 @@ class TestCacheMutationFuzz:
         r_before = tn.contract()
         tn.replace_tensor("A", t2)
         r_cached = tn.contract(cache=True)
-        r_fresh  = tn.contract(cache=False)
+        r_fresh = tn.contract(cache=False)
 
         np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
         # Sanity: replacing with a different tensor changed the result
@@ -362,7 +404,7 @@ class TestCacheMutationFuzz:
         tn.add_node("B", t_b)
 
         r_cached = tn.contract(cache=True)
-        r_fresh  = tn.contract(cache=False)
+        r_fresh = tn.contract(cache=False)
 
         np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
         # Adding B changes the result shape (outer product with B)
@@ -380,7 +422,7 @@ class TestCacheMutationFuzz:
         tn.remove_node("B")
 
         r_cached = tn.contract(cache=True)
-        r_fresh  = tn.contract(cache=False)
+        r_fresh = tn.contract(cache=False)
 
         np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
         assert r_cached.ndim < r_both.ndim
@@ -394,8 +436,10 @@ class TestCacheMutationFuzz:
         """
         charges = np.zeros(3, dtype=np.int32)
         data = jnp.array([1.0, 2.0, 3.0])
-        A = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN,  label="la"),))
-        B = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.OUT, label="lb"),))
+        A = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN, label="la"),))
+        B = DenseTensor(
+            data, (TensorIndex(u1, charges, FlowDirection.OUT, label="lb"),)
+        )
 
         tn = TensorNetwork()
         tn.add_node("A", A)
@@ -405,7 +449,7 @@ class TestCacheMutationFuzz:
         tn.connect("A", "la", "B", "lb")
 
         r_cached = tn.contract(cache=True)
-        r_fresh  = tn.contract(cache=False)
+        r_fresh = tn.contract(cache=False)
 
         np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
         # After connecting, the bond is contracted → scalar
@@ -415,8 +459,10 @@ class TestCacheMutationFuzz:
         """After disconnect, contraction expands back to outer product."""
         charges = np.zeros(3, dtype=np.int32)
         data = jnp.array([1.0, 2.0, 3.0])
-        A = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN,  label="la"),))
-        B = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.OUT, label="lb"),))
+        A = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN, label="la"),))
+        B = DenseTensor(
+            data, (TensorIndex(u1, charges, FlowDirection.OUT, label="lb"),)
+        )
 
         tn = TensorNetwork()
         tn.add_node("A", A)
@@ -427,7 +473,7 @@ class TestCacheMutationFuzz:
         tn.disconnect("A", "la", "B", "lb")
 
         r_cached = tn.contract(cache=True)
-        r_fresh  = tn.contract(cache=False)
+        r_fresh = tn.contract(cache=False)
 
         np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
         assert r_cached.ndim > r_contracted.ndim
@@ -442,7 +488,7 @@ class TestCacheMutationFuzz:
         tn.relabel_bond("A", "old", "new")
 
         r_cached = tn.contract(cache=True)
-        r_fresh  = tn.contract(cache=False)
+        r_fresh = tn.contract(cache=False)
 
         np.testing.assert_allclose(r_cached.todense(), r_fresh.todense(), rtol=1e-5)
         # The new label is on the result tensor
@@ -455,17 +501,21 @@ class TestCacheMutationFuzz:
 
         for seed, scale in enumerate([1.0, 2.0, 3.0], start=40):
             data = jax.random.normal(jax.random.PRNGKey(seed), (3,)) * scale
-            t = DenseTensor(data, (TensorIndex(u1, charges, FlowDirection.IN, label="v"),))
+            t = DenseTensor(
+                data, (TensorIndex(u1, charges, FlowDirection.IN, label="v"),)
+            )
             if "A" not in tn.node_ids():
                 tn.add_node("A", t)
             else:
                 tn.replace_tensor("A", t)
 
             r_cached = tn.contract(cache=True)
-            r_fresh  = tn.contract(cache=False)
+            r_fresh = tn.contract(cache=False)
             np.testing.assert_allclose(
-                r_cached.todense(), r_fresh.todense(), rtol=1e-5,
-                err_msg=f"Cache inconsistency after replace with scale={scale}"
+                r_cached.todense(),
+                r_fresh.todense(),
+                rtol=1e-5,
+                err_msg=f"Cache inconsistency after replace with scale={scale}",
             )
 
 
@@ -482,11 +532,13 @@ class TestBuildPEPS:
             row = []
             for j in range(2):
                 indices = (
-                    TensorIndex(u1, charges_p, FlowDirection.IN,  label=f"p{i}{j}"),
+                    TensorIndex(u1, charges_p, FlowDirection.IN, label=f"p{i}{j}"),
                     TensorIndex(u1, charges_b, FlowDirection.OUT, label=f"h{i}_{j}"),
                     TensorIndex(u1, charges_b, FlowDirection.OUT, label=f"v{i}_{j}"),
                 )
-                data = jax.random.normal(jax.random.PRNGKey(i * 2 + j), (d_phys, D_bond, D_bond))
+                data = jax.random.normal(
+                    jax.random.PRNGKey(i * 2 + j), (d_phys, D_bond, D_bond)
+                )
                 row.append(DenseTensor(data, indices))
             tensors.append(row)
 

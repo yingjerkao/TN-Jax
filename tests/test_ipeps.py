@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.algorithms.ipeps import (
+from tenax.algorithms.ipeps import (
     CTMConfig,
     CTMEnvironment,
     _build_double_layer,
@@ -177,7 +177,7 @@ class TestCTM:
     def test_ctm_edge_tensors_change(self, small_peps_tensor):
         """After a full CTM run, edge tensors should differ from initialization."""
         config = CTMConfig(chi=4, max_iter=10)
-        from tnjax.algorithms.ipeps import _build_double_layer, _initialize_ctm_env
+        from tenax.algorithms.ipeps import _build_double_layer, _initialize_ctm_env
 
         a = _build_double_layer(small_peps_tensor)
         D = small_peps_tensor.shape[0]

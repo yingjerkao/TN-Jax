@@ -18,7 +18,7 @@ import jax
 import jax.numpy as jnp
 
 if TYPE_CHECKING:
-    from tnjax.algorithms.ipeps import CTMConfig, CTMEnvironment
+    from tenax.algorithms.ipeps import CTMConfig, CTMEnvironment
 
 # ---------------------------------------------------------------------------
 # 1. Truncated SVD with stable backward pass
@@ -88,15 +88,15 @@ def _truncated_svd_ad_bwd(
     # --- Lorentzian-regularized F-matrix ---
     # F_ij = (s_i^2 - s_j^2) / ((s_i^2 - s_j^2)^2 + eps^2)
     # Prevents divergences from degenerate singular values.
-    s2 = s ** 2
+    s2 = s**2
     diff = s2[:, None] - s2[None, :]
-    F = diff / (diff ** 2 + eps ** 2)
+    F = diff / (diff**2 + eps**2)
     # Zero diagonal (gauge freedom)
     F = F - jnp.diag(jnp.diag(F))
 
     # Antisymmetric parts of projected cotangents
-    UtdU = U.conj().T @ dU                    # (k, k)
-    VtdV = V.conj().T @ dVh.conj().T          # (k, k)
+    UtdU = U.conj().T @ dU  # (k, k)
+    VtdV = V.conj().T @ dVh.conj().T  # (k, k)
     UtdU_anti = 0.5 * (UtdU - UtdU.conj().T)
     VtdV_anti = 0.5 * (VtdV - VtdV.conj().T)
 
@@ -141,7 +141,7 @@ def _ctm_step(A: jax.Array, env: CTMEnvironment, config: CTMConfig) -> CTMEnviro
 
     Imports CTM move functions from ipeps module to avoid circular imports.
     """
-    from tnjax.algorithms.ipeps import (
+    from tenax.algorithms.ipeps import (
         _build_double_layer,
         _ctm_bottom_move,
         _ctm_left_move,
@@ -153,7 +153,7 @@ def _ctm_step(A: jax.Array, env: CTMEnvironment, config: CTMConfig) -> CTMEnviro
     a = _build_double_layer(A)
     if a.ndim == 8:
         D = a.shape[0]
-        a = a.reshape(D ** 2, D ** 2, D ** 2, D ** 2)
+        a = a.reshape(D**2, D**2, D**2, D**2)
 
     chi = config.chi
     env = _ctm_left_move(env, a, chi)
@@ -175,13 +175,13 @@ def _env_to_flat(env: CTMEnvironment) -> jax.Array:
 
 def _flat_to_env(flat: jax.Array, env_template: CTMEnvironment) -> CTMEnvironment:
     """Reconstruct CTMEnvironment from a flat array using template shapes."""
-    from tnjax.algorithms.ipeps import CTMEnvironment as CTMEnv
+    from tenax.algorithms.ipeps import CTMEnvironment as CTMEnv
 
     arrays = []
     offset = 0
     for t in env_template:
         size = t.size
-        arrays.append(flat[offset:offset + size].reshape(t.shape))
+        arrays.append(flat[offset : offset + size].reshape(t.shape))
         offset += size
     return CTMEnv(*arrays)
 
@@ -196,7 +196,7 @@ def _gauge_fix_ctm(env: CTMEnvironment) -> CTMEnvironment:
     and the corresponding Q factors are absorbed into the adjacent edge
     tensors. This removes the gauge freedom in the CTM environment.
     """
-    from tnjax.algorithms.ipeps import CTMEnvironment as CTMEnv
+    from tenax.algorithms.ipeps import CTMEnvironment as CTMEnv
 
     C1, C2, C3, C4, T1, T2, T3, T4 = env
 
@@ -259,7 +259,7 @@ def _ctm_fixed_point_impl(
     initial_env: CTMEnvironment | None = None,
 ) -> CTMEnvironment:
     """Implementation of CTM with custom VJP for implicit differentiation."""
-    from tnjax.algorithms.ipeps import (
+    from tenax.algorithms.ipeps import (
         _build_double_layer,
         _initialize_ctm_env,
     )
@@ -267,7 +267,7 @@ def _ctm_fixed_point_impl(
     a = _build_double_layer(A)
     if a.ndim == 8:
         D_phys = a.shape[0]
-        a = a.reshape(D_phys ** 2, D_phys ** 2, D_phys ** 2, D_phys ** 2)
+        a = a.reshape(D_phys**2, D_phys**2, D_phys**2, D_phys**2)
 
     if initial_env is not None:
         env = initial_env
@@ -307,7 +307,7 @@ def ctm_converge(A: jax.Array, config_tuple: tuple) -> tuple[jax.Array, ...]:
     Returns:
         Flat tuple of environment tensors (C1, C2, ..., T4).
     """
-    from tnjax.algorithms.ipeps import CTMConfig
+    from tenax.algorithms.ipeps import CTMConfig
 
     config = CTMConfig(
         chi=config_tuple[0],
@@ -324,7 +324,7 @@ def _ctm_converge_fwd(
     config_tuple: tuple,
 ) -> tuple[tuple[jax.Array, ...], tuple]:
     """Forward pass — run CTM, cache result for backward."""
-    from tnjax.algorithms.ipeps import CTMConfig
+    from tenax.algorithms.ipeps import CTMConfig
 
     config = CTMConfig(
         chi=config_tuple[0],
@@ -349,7 +349,7 @@ def _ctm_converge_bwd(
     013237), where J = d(ctm_step)/d(env) is the Jacobian of one CTM step.
     Then ``dA = d(ctm_step)/dA^T @ lambda``.
     """
-    from tnjax.algorithms.ipeps import CTMConfig, CTMEnvironment
+    from tenax.algorithms.ipeps import CTMConfig, CTMEnvironment
 
     A, env_tuple = residuals
     config = CTMConfig(
@@ -382,7 +382,11 @@ def _ctm_converge_bwd(
 
     max_fp_iter = min(config.max_iter, 50)
     lam, info = jax_gmres(
-        apply_I_minus_Jt, g, x0=g, tol=config.conv_tol, maxiter=max_fp_iter,
+        apply_I_minus_Jt,
+        g,
+        x0=g,
+        tol=config.conv_tol,
+        maxiter=max_fp_iter,
     )
 
     # Now compute dA = d(step)/dA^T @ lambda

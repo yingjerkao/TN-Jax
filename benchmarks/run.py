@@ -1,4 +1,4 @@
-"""CLI entry point for TN-Jax benchmarks.
+"""CLI entry point for Tenax benchmarks.
 
 Usage::
 
@@ -27,34 +27,39 @@ _ALL_SIZES = ["small", "medium", "large"]
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="TN-Jax benchmark suite",
+        description="Tenax benchmark suite",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--backend", "-b",
+        "--backend",
+        "-b",
         default="auto",
         help="Backend: cpu | cuda | gpu | tpu | metal | auto (default: auto)",
     )
     parser.add_argument(
-        "--algorithm", "-a",
+        "--algorithm",
+        "-a",
         nargs="+",
         default=["all"],
         help="Algorithms to benchmark (default: all)",
     )
     parser.add_argument(
-        "--size", "-s",
+        "--size",
+        "-s",
         nargs="+",
         default=["all"],
         help="Sizes to benchmark: small | medium | large | all (default: all)",
     )
     parser.add_argument(
-        "--trials", "-n",
+        "--trials",
+        "-n",
         type=int,
         default=3,
         help="Number of timed trials per benchmark (default: 3)",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default=None,
         help="JSON output path (default: benchmarks/results/<backend>_<timestamp>.json)",
     )
@@ -83,7 +88,11 @@ def main() -> None:
     import importlib
 
     from benchmarks.backend import default_dtype, get_backend_info
-    from benchmarks.results import print_summary_table, save_results_csv, save_results_json
+    from benchmarks.results import (
+        print_summary_table,
+        save_results_csv,
+        save_results_json,
+    )
     from benchmarks.runner import run_benchmark
 
     if args.list_backends:
@@ -98,7 +107,9 @@ def main() -> None:
     dtype_str = getattr(dtype, "__name__", str(dtype))
     backend_name = backend_info["backend"]
 
-    print(f"Backend: {backend_name} | dtype: {dtype_str} | x64: {backend_info['x64_enabled']}")
+    print(
+        f"Backend: {backend_name} | dtype: {dtype_str} | x64: {backend_info['x64_enabled']}"
+    )
     print(f"Device: {backend_info['device_kind']} (x{backend_info['device_count']})")
 
     # Resolve algorithms
@@ -108,7 +119,9 @@ def main() -> None:
         algo_names = []
         for a in args.algorithm:
             if a not in _ALGORITHM_MODULES:
-                print(f"Unknown algorithm: {a}. Available: {', '.join(_ALGORITHM_MODULES)}")
+                print(
+                    f"Unknown algorithm: {a}. Available: {', '.join(_ALGORITHM_MODULES)}"
+                )
                 sys.exit(1)
             algo_names.append(a)
 
@@ -127,7 +140,9 @@ def main() -> None:
         print("No benchmarks matched the selection.")
         sys.exit(0)
 
-    print(f"\nRunning {len(all_benchmarks)} benchmark(s), {args.trials} trial(s) each...\n")
+    print(
+        f"\nRunning {len(all_benchmarks)} benchmark(s), {args.trials} trial(s) each...\n"
+    )
 
     # Resolve output paths
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -149,7 +164,7 @@ def main() -> None:
             num_trials=args.trials,
         )
         if result.error:
-            print(f"ERROR")
+            print("ERROR")
         else:
             print(f"{result.mean_time_s:.3f}s (min={result.min_time_s:.3f}s)")
         results.append(result)

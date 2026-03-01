@@ -1,6 +1,6 @@
 # AD-Based iPEPS Excitations
 
-TN-Jax implements the quasiparticle excitation method from
+Tenax implements the quasiparticle excitation method from
 [Ponsioen, Assaad & Corboz, SciPost Phys. 12, 006 (2022)](https://scipost.org/10.21468/SciPostPhys.12.1.006),
 using JAX automatic differentiation to construct the effective Hamiltonian
 and norm matrices. The stable AD infrastructure follows
@@ -9,7 +9,7 @@ and norm matrices. The stable AD infrastructure follows
 ## Stable AD Infrastructure
 
 Naively differentiating through CTM has three problems. The solutions live
-in `tnjax.algorithms.ad_utils`.
+in `tenax.algorithms.ad_utils`.
 
 ### 1. Custom truncated SVD (`truncated_svd_ad`)
 
@@ -108,7 +108,7 @@ giving a unique fixed point.
 gradients and optimize the iPEPS tensor with optax:
 
 ```python
-from tnjax import iPEPSConfig, CTMConfig, optimize_gs_ad
+from tenax import iPEPSConfig, CTMConfig, optimize_gs_ad
 
 config = iPEPSConfig(
     max_bond_dim=2,
@@ -154,7 +154,7 @@ solved after projecting out the null space of $N$.
 
 ```python
 import numpy as np
-from tnjax import ExcitationConfig, compute_excitations, make_momentum_path
+from tenax import ExcitationConfig, compute_excitations, make_momentum_path
 
 config = ExcitationConfig(
     num_excitations=3,

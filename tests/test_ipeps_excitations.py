@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.algorithms.ipeps import (
+from tenax.algorithms.ipeps import (
     CTMConfig,
     CTMEnvironment,
     _build_double_layer_open,
@@ -14,7 +14,7 @@ from tnjax.algorithms.ipeps import (
     iPEPSConfig,
     optimize_gs_ad,
 )
-from tnjax.algorithms.ipeps_excitations import (
+from tenax.algorithms.ipeps_excitations import (
     ExcitationConfig,
     ExcitationResult,
     _build_double_layer_BB_open,

@@ -18,7 +18,7 @@ from enum import IntEnum
 
 import numpy as np
 
-from tnjax.core.symmetry import BaseSymmetry
+from tenax.core.symmetry import BaseSymmetry
 
 # Label type: strings (descriptive) or integers (positional)
 Label = str | int
@@ -71,9 +71,7 @@ class TensorIndex:
 
     def __post_init__(self) -> None:
         if self.charges.ndim != 1:
-            raise ValueError(
-                f"charges must be 1-D, got shape {self.charges.shape}"
-            )
+            raise ValueError(f"charges must be 1-D, got shape {self.charges.shape}")
         # Coerce to int32 if needed (use object.__setattr__ since frozen)
         if self.charges.dtype != np.int32:
             object.__setattr__(self, "charges", self.charges.astype(np.int32))

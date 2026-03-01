@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tnjax"
+name = "tenax-tn"
 version = "0.1.0"
 description = "JAX-based tensor network library with symmetry-aware block-sparse tensors"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "TN-Jax Contributors" }]
+authors = [{ name = "Tenax Contributors" }]
 keywords = ["tensor network", "JAX", "DMRG", "TRG", "iPEPS", "quantum"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -53,19 +53,19 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yingjerkao/TN-Jax"
-Repository = "https://github.com/yingjerkao/TN-Jax"
-Issues = "https://github.com/yingjerkao/TN-Jax/issues"
+Homepage = "https://github.com/tenax-lab/tenax"
+Repository = "https://github.com/tenax-lab/tenax"
+Issues = "https://github.com/tenax-lab/tenax/issues"
 
 [dependency-groups]
-dev = ["tnjax[dev]"]
+dev = ["tenax-tn[dev]"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/tnjax"]
+packages = ["src/tenax"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=tnjax --cov-report=term-missing --cov-report=xml"
+addopts = "--cov=tenax --cov-report=term-missing --cov-report=xml"
 markers = [
     "core: fast API and infrastructure tests",
     "algorithm: full algorithm runs (DMRG, TRG, HOTRG, iPEPS)",
@@ -81,9 +81,9 @@ select = ["E", "F", "I", "UP"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/tnjax/__init__.py" = ["E402"]
-"tests/**" = ["F401", "E402"]
+"src/tenax/__init__.py" = ["E402"]
 "examples/**" = ["E402"]
+"tests/**" = ["F401", "E402"]
 
 [tool.mypy]
 python_version = "3.11"

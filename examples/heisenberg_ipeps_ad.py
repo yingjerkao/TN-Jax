@@ -29,7 +29,7 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from tnjax import CTMConfig, iPEPSConfig, optimize_gs_ad
+from tenax import CTMConfig, iPEPSConfig, optimize_gs_ad
 
 # ---------------------------------------------------------------------------
 # Hamiltonian

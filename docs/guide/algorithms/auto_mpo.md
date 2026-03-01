@@ -18,7 +18,7 @@ optimal value.
 ## Class-based API
 
 ```python
-from tnjax import AutoMPO, dmrg, DMRGConfig, build_random_mps
+from tenax import AutoMPO, dmrg, DMRGConfig, build_random_mps
 
 L = 10
 auto = AutoMPO(L=L, d=2)  # spin-1/2, d=2
@@ -75,7 +75,7 @@ mpo = auto.to_mpo(compress=True, compress_tol=1e-12)
 `build_auto_mpo` provides a one-call interface:
 
 ```python
-from tnjax import build_auto_mpo
+from tenax import build_auto_mpo
 
 L = 10
 terms = (
@@ -89,7 +89,7 @@ mpo = build_auto_mpo(terms, L=L, d=2)
 
 ## Built-in operators
 
-TN-Jax provides standard operator sets:
+Tenax provides standard operator sets:
 
 ### `spin_half_ops()` (d=2)
 

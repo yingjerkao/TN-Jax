@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.algorithms.dmrg import (
+from tenax.algorithms.dmrg import (
     DMRGConfig,
     DMRGResult,
     build_mpo_heisenberg,
@@ -13,9 +13,9 @@ from tnjax.algorithms.dmrg import (
     build_random_symmetric_mps,
     dmrg,
 )
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry
+from tenax.core.tensor import DenseTensor
 
 
 class TestBuildMPOHeisenberg:
@@ -29,7 +29,9 @@ class TestBuildMPOHeisenberg:
         for node_id in mpo.node_ids():
             tensor = mpo.get_tensor(node_id)
             labels = tensor.labels()
-            phys_labels = [lbl for lbl in labels if isinstance(lbl, str) and "mpo_top" in lbl]
+            phys_labels = [
+                lbl for lbl in labels if isinstance(lbl, str) and "mpo_top" in lbl
+            ]
             if phys_labels:
                 lbl = phys_labels[0]
                 idx = tensor.indices[labels.index(lbl)]
@@ -171,7 +173,8 @@ class TestDMRGRun:
         mpo = build_mpo_heisenberg(L)
         mps = build_random_mps(L, physical_dim=2, bond_dim=4)
         config = DMRGConfig(
-            max_bond_dim=4, num_sweeps=2,
+            max_bond_dim=4,
+            num_sweeps=2,
             convergence_tol=1e-15,  # impossible to reach in 2 sweeps
             lanczos_max_iter=3,
         )
@@ -306,7 +309,7 @@ class TestBuildRandomSymmetricMPS:
 
     def test_blocks_are_nontrivial(self):
         """SymmetricTensor sites must have at least one non-empty block."""
-        from tnjax.core.tensor import SymmetricTensor
+        from tenax.core.tensor import SymmetricTensor
 
         mps = build_random_symmetric_mps(4, bond_dim=4)
         for i in mps.node_ids():

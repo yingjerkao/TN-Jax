@@ -5,14 +5,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.algorithms.trg import (
+from tenax.algorithms.trg import (
     TRGConfig,
     _trg_step,
     compute_ising_tensor,
     ising_free_energy_exact,
     trg,
 )
-from tnjax.core.tensor import DenseTensor
+from tenax.core.tensor import DenseTensor
 
 
 class TestTRGConfig:

@@ -25,10 +25,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tnjax.core import LOG_EPS
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor, Tensor
+from tenax.core import LOG_EPS
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry
+from tenax.core.tensor import DenseTensor, Tensor
 
 
 @dataclass

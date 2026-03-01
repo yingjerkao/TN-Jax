@@ -1,4 +1,4 @@
-"""Backend selection and configuration for TN-Jax benchmarks.
+"""Backend selection and configuration for Tenax benchmarks.
 
 Must call ``configure_backend`` **before** any ``import jax``.
 """
@@ -41,7 +41,9 @@ def get_backend_info() -> dict:
     devices = jax.devices()
     return {
         "backend": devices[0].platform if devices else "unknown",
-        "device_kind": getattr(devices[0], "device_kind", "unknown") if devices else "unknown",
+        "device_kind": getattr(devices[0], "device_kind", "unknown")
+        if devices
+        else "unknown",
         "device_count": len(devices),
         "x64_enabled": jax.config.x64_enabled,
     }

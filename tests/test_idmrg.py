@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.algorithms.idmrg import (
+from tenax.algorithms.idmrg import (
     build_bulk_mpo_heisenberg,
     build_bulk_mpo_heisenberg_cylinder,
     idmrg,
@@ -78,7 +78,7 @@ class TestBuildBulkMPO:
 
     def test_matches_build_mpo_heisenberg_bulk(self):
         """The bulk W-matrix should match the internal bulk W from build_mpo_heisenberg."""
-        from tnjax.algorithms.dmrg import build_mpo_heisenberg
+        from tenax.algorithms.dmrg import build_mpo_heisenberg
 
         # For L=3 the middle site (i=1) is a bulk tensor: (5, 2, 2, 5)
         mpo = build_mpo_heisenberg(L=3, Jz=1.0, Jxy=1.0, hz=0.0)
@@ -87,8 +87,10 @@ class TestBuildBulkMPO:
         W_bulk = build_bulk_mpo_heisenberg(Jz=1.0, Jxy=1.0, hz=0.0).todense()
 
         np.testing.assert_allclose(
-            np.array(W_bulk), np.array(W_ref), atol=1e-6,
-            err_msg="Bulk MPO does not match build_mpo_heisenberg middle site"
+            np.array(W_bulk),
+            np.array(W_ref),
+            atol=1e-6,
+            err_msg="Bulk MPO does not match build_mpo_heisenberg middle site",
         )
 
     def test_invalid_d_raises(self):
@@ -138,8 +140,7 @@ class TestiDMRGRun:
         )
         result = idmrg(W, cfg, dtype=jnp.float64)
         assert abs(result.energy_per_site - e_exact) < 0.01, (
-            f"e/site = {result.energy_per_site:.6f} far from "
-            f"Bethe ansatz {e_exact:.6f}"
+            f"e/site = {result.energy_per_site:.6f} far from Bethe ansatz {e_exact:.6f}"
         )
 
     def test_energy_improves_with_bond_dim(self):
@@ -147,10 +148,14 @@ class TestiDMRGRun:
         W = build_bulk_mpo_heisenberg(dtype=jnp.float64)
 
         cfg_small = iDMRGConfig(
-            max_bond_dim=8, max_iterations=80, lanczos_max_iter=20,
+            max_bond_dim=8,
+            max_iterations=80,
+            lanczos_max_iter=20,
         )
         cfg_large = iDMRGConfig(
-            max_bond_dim=32, max_iterations=120, lanczos_max_iter=20,
+            max_bond_dim=32,
+            max_iterations=120,
+            lanczos_max_iter=20,
         )
         res_small = idmrg(W, cfg_small, dtype=jnp.float64)
         res_large = idmrg(W, cfg_large, dtype=jnp.float64)
@@ -248,8 +253,10 @@ class TestBuildBulkMPOCylinder:
         # h_ring = W[D_w-1, :, :, 0]  (vacuum → done)
         h_ring = dense[D_w - 1, :, :, 0]
         np.testing.assert_allclose(
-            np.array(h_ring), np.array(h_ring.T), atol=1e-12,
-            err_msg="h_ring should be Hermitian (real symmetric)"
+            np.array(h_ring),
+            np.array(h_ring.T),
+            atol=1e-12,
+            err_msg="h_ring should be Hermitian (real symmetric)",
         )
 
     def test_h_ring_hermitian_ly4(self):
@@ -259,8 +266,10 @@ class TestBuildBulkMPOCylinder:
         D_w = dense.shape[0]
         h_ring = dense[D_w - 1, :, :, 0]
         np.testing.assert_allclose(
-            np.array(h_ring), np.array(h_ring.T), atol=1e-12,
-            err_msg="h_ring should be Hermitian (real symmetric)"
+            np.array(h_ring),
+            np.array(h_ring.T),
+            atol=1e-12,
+            err_msg="h_ring should be Hermitian (real symmetric)",
         )
 
 

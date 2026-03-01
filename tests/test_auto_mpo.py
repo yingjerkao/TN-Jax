@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from tnjax.algorithms.auto_mpo import (
+from tenax.algorithms.auto_mpo import (
     AutoMPO,
     HamiltonianTerm,
     _assign_bond_states,
@@ -14,13 +14,13 @@ from tnjax.algorithms.auto_mpo import (
     spin_half_ops,
     spin_one_ops,
 )
-from tnjax.algorithms.dmrg import (
+from tenax.algorithms.dmrg import (
     DMRGConfig,
     build_mpo_heisenberg,
     build_random_mps,
     dmrg,
 )
-from tnjax.core.tensor import SymmetricTensor
+from tenax.core.tensor import SymmetricTensor
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -200,8 +200,10 @@ class TestAutoMPOAlgorithm:
             # Each single-site term contributes 0.5*Sz at (vac_l, done_r)
             # All 3 terms sum: total at site i = 0.5*Sz
             np.testing.assert_allclose(
-                W[vac_l, :, :, done_r], 0.5 * ops["Sz"], atol=1e-14,
-                err_msg=f"Site {i}: single-site W entry incorrect"
+                W[vac_l, :, :, done_r],
+                0.5 * ops["Sz"],
+                atol=1e-14,
+                err_msg=f"Site {i}: single-site W entry incorrect",
             )
 
     def test_two_site_term_path(self):
@@ -220,12 +222,16 @@ class TestAutoMPOAlgorithm:
         # State at bond 0: done=0, in-flight state 1=1, vac=2
         state = bond_states[0][0]  # = 1
         np.testing.assert_allclose(
-            W0[0, :, :, state], coeff * ops["Sp"], atol=1e-14,
-            err_msg="W0[vac, :, :, state] should equal coeff*Sp"
+            W0[0, :, :, state],
+            coeff * ops["Sp"],
+            atol=1e-14,
+            err_msg="W0[vac, :, :, state] should equal coeff*Sp",
         )
         np.testing.assert_allclose(
-            W1[state, :, :, 0], ops["Sm"], atol=1e-14,
-            err_msg="W1[state, :, :, done] should equal Sm"
+            W1[state, :, :, 0],
+            ops["Sm"],
+            atol=1e-14,
+            err_msg="W1[state, :, :, done] should equal Sm",
         )
 
     def test_identity_passthrough_bulk(self):
@@ -233,9 +239,7 @@ class TestAutoMPOAlgorithm:
         ops = spin_half_ops()
         L = 4
         # Only terms spanning bond 0 (sites 0 and 1)
-        terms = [
-            HamiltonianTerm(coefficient=1.0, ops=((0, ops["Sp"]), (1, ops["Sm"])))
-        ]
+        terms = [HamiltonianTerm(coefficient=1.0, ops=((0, ops["Sp"]), (1, ops["Sm"])))]
         bond_states = _assign_bond_states(terms, L)
         identity = np.eye(2)
         w_mats = _build_w_matrices(terms, bond_states, L, 2, identity)
@@ -255,9 +259,7 @@ class TestAutoMPOAlgorithm:
         L = 5
         coeff = 2.0
         terms = [
-            HamiltonianTerm(
-                coefficient=coeff, ops=((0, ops["Sz"]), (3, ops["Sz"]))
-            )
+            HamiltonianTerm(coefficient=coeff, ops=((0, ops["Sz"]), (3, ops["Sz"])))
         ]
         bond_states = _assign_bond_states(terms, L)
         identity = np.eye(2)
@@ -282,9 +284,7 @@ class TestAutoMPOAlgorithm:
             w_mats[2][state1, :, :, state2], identity, atol=1e-14
         )
         # W3 (bulk): W[state2, :, :, done=0] = Sz (last op site)
-        np.testing.assert_allclose(
-            w_mats[3][state2, :, :, 0], ops["Sz"], atol=1e-14
-        )
+        np.testing.assert_allclose(w_mats[3][state2, :, :, 0], ops["Sz"], atol=1e-14)
 
 
 # ---------------------------------------------------------------------------
@@ -536,7 +536,7 @@ class TestAutoMPOCompression:
 
 class TestBuildAutoMPOFunctional:
     def test_build_auto_mpo_returns_tensor_network(self):
-        from tnjax.network.network import TensorNetwork
+        from tenax.network.network import TensorNetwork
 
         mpo = build_auto_mpo(_heisenberg_terms(4), L=4)
         assert isinstance(mpo, TensorNetwork)
@@ -576,8 +576,10 @@ class TestAutoMPOSymmetric:
             d_arr = mpo_dense.get_tensor(i).todense()
             s_arr = mpo_sym.get_tensor(i).todense()
             np.testing.assert_allclose(
-                np.array(s_arr), np.array(d_arr), atol=1e-12,
-                err_msg=f"Site {i}: symmetric todense != dense"
+                np.array(s_arr),
+                np.array(d_arr),
+                atol=1e-12,
+                err_msg=f"Site {i}: symmetric todense != dense",
             )
 
     def test_symmetric_mpo_blocks_are_nontrivial(self):
@@ -596,9 +598,7 @@ class TestAutoMPOSymmetric:
             # full dense tensor size for at least bulk sites.
             dense = tensor.todense()
             total_dense = int(np.prod(dense.shape))
-            stored = sum(
-                int(np.prod(b.shape)) for b in tensor.blocks.values()
-            )
+            stored = sum(int(np.prod(b.shape)) for b in tensor.blocks.values())
             if i > 0 and i < L - 1:
                 assert stored < total_dense, (
                     f"Site {i}: stored ({stored}) >= dense ({total_dense})"
@@ -621,9 +621,7 @@ class TestAutoMPOSymmetric:
             )
         bond_states = _assign_bond_states(terms_list, L)
         phys_charges = np.array([1, -1], dtype=np.int32)
-        bond_charges = _compute_bond_charges(
-            terms_list, bond_states, L, phys_charges
-        )
+        bond_charges = _compute_bond_charges(terms_list, bond_states, L, phys_charges)
 
         # Each bond should have D=5: [done=0, Sz=0, Sp=2, Sm=-2, vac=0]
         for j, bc in enumerate(bond_charges):
@@ -675,8 +673,10 @@ class TestAutoMPOSymmetric:
             d_arr = mpo_dense.get_tensor(i).todense()
             s_arr = mpo_sym.get_tensor(i).todense()
             np.testing.assert_allclose(
-                np.array(s_arr), np.array(d_arr), atol=1e-12,
-                err_msg=f"Spin-1 site {i}: symmetric todense != dense"
+                np.array(s_arr),
+                np.array(d_arr),
+                atol=1e-12,
+                err_msg=f"Spin-1 site {i}: symmetric todense != dense",
             )
 
     def test_operator_charge_detection(self):

@@ -1,21 +1,21 @@
 # Gotchas
 
-Common pitfalls when working with TN-Jax and JAX.
+Common pitfalls when working with Tenax and JAX.
 
 ## Float64 precision and `JAX_ENABLE_X64`
 
-TN-Jax defaults to `float64` for all tensors and algorithms. Importing
-`tnjax` automatically calls `jax.config.update("jax_enable_x64", True)`,
+Tenax defaults to `float64` for all tensors and algorithms. Importing
+`tenax` automatically calls `jax.config.update("jax_enable_x64", True)`,
 so 64-bit arithmetic is enabled out of the box.
 
-If you use JAX directly *before* importing `tnjax`, you may need to enable
+If you use JAX directly *before* importing `tenax`, you may need to enable
 x64 mode yourself:
 
 ```python
 import jax
 jax.config.update("jax_enable_x64", True)
 
-import tnjax  # also enables x64, but JAX was already imported above
+import tenax  # also enables x64, but JAX was already imported above
 ```
 
 Without x64 enabled:

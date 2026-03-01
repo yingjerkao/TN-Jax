@@ -14,12 +14,13 @@ def _enable_x64():
     yield
     jax.config.update("jax_enable_x64", prev)
 
-from tnjax.algorithms.ad_utils import (
+
+from tenax.algorithms.ad_utils import (
     _gauge_fix_ctm,
     ctm_converge,
     truncated_svd_ad,
 )
-from tnjax.algorithms.ipeps import CTMConfig, CTMEnvironment, ctm
+from tenax.algorithms.ipeps import CTMConfig, CTMEnvironment, ctm
 
 
 class TestTruncatedSVDADForward:
@@ -121,7 +122,7 @@ class TestTruncatedSVDADDegenerate:
 
         def loss(M_in):
             U, s, Vh = truncated_svd_ad(M_in, chi)
-            return jnp.sum(s ** 2)
+            return jnp.sum(s**2)
 
         grad = jax.grad(loss)(M)
         assert jnp.all(jnp.isfinite(grad)), f"NaN/Inf in gradient: {grad}"
@@ -209,7 +210,8 @@ class TestCTMFixedPointGradient:
             A_norm = A_in / (jnp.linalg.norm(A_in) + 1e-10)
             env_tuple = ctm_converge(A_norm, config_tuple)
             env = CTMEnvironment(*env_tuple)
-            from tnjax.algorithms.ipeps import compute_energy_ctm
+            from tenax.algorithms.ipeps import compute_energy_ctm
+
             return compute_energy_ctm(A_norm, env, gate, d)
 
         grad = jax.grad(energy_fn)(A)
@@ -273,7 +275,8 @@ class TestGMRESBackward:
             A_norm = A_in / (jnp.linalg.norm(A_in) + 1e-10)
             env_tuple = ctm_converge(A_norm, config_tuple)
             env = CTMEnvironment(*env_tuple)
-            from tnjax.algorithms.ipeps import compute_energy_ctm
+            from tenax.algorithms.ipeps import compute_energy_ctm
+
             return compute_energy_ctm(A_norm, env, gate, d)
 
         grad = jax.grad(energy_fn)(A)
@@ -294,7 +297,8 @@ class TestGMRESBackward:
             A_norm = A_in / (jnp.linalg.norm(A_in) + 1e-10)
             env_tuple = ctm_converge(A_norm, config_tuple)
             env = CTMEnvironment(*env_tuple)
-            from tnjax.algorithms.ipeps import compute_energy_ctm
+            from tenax.algorithms.ipeps import compute_energy_ctm
+
             return compute_energy_ctm(A_norm, env, gate, d)
 
         # Two independent gradient calls should give the same result

@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.contraction.contractor import (
+from tenax.contraction.contractor import (
     _cached_contraction_path,
     _labels_to_subscripts,
     contract,
@@ -13,13 +13,14 @@ from tnjax.contraction.contractor import (
     qr_decompose,
     truncated_svd,
 )
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor, SymmetricTensor
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry
+from tenax.core.tensor import DenseTensor, SymmetricTensor
 
 # ------------------------------------------------------------------ #
 # Helpers                                                              #
 # ------------------------------------------------------------------ #
+
 
 def make_dense(u1, shape, labels, flows, rng, charges_per_leg=None):
     """Create a DenseTensor with given shape and labels."""
@@ -38,12 +39,13 @@ def make_dense(u1, shape, labels, flows, rng, charges_per_leg=None):
 # Label → subscript translation                                        #
 # ------------------------------------------------------------------ #
 
+
 class TestLabelsToSubscripts:
     def test_two_tensor_contraction(self, u1, rng):
         """Two tensors sharing one label → subscript contracts that label."""
         charges = np.zeros(3, dtype=np.int32)
-        idx_i = TensorIndex(u1, charges, FlowDirection.IN,  label="i")
-        idx_j_in  = TensorIndex(u1, charges, FlowDirection.IN,  label="j")
+        idx_i = TensorIndex(u1, charges, FlowDirection.IN, label="i")
+        idx_j_in = TensorIndex(u1, charges, FlowDirection.IN, label="j")
         idx_j_out = TensorIndex(u1, charges, FlowDirection.OUT, label="j")  # shared
         idx_k = TensorIndex(u1, charges, FlowDirection.OUT, label="k")
 
@@ -89,14 +91,15 @@ class TestLabelsToSubscripts:
 # Dense contraction                                                    #
 # ------------------------------------------------------------------ #
 
+
 class TestContractDense:
     def test_matrix_vector_multiply(self, u1, rng):
         """contract(M, v) where shared label 'j' gives M @ v."""
         n = 4
         charges = np.zeros(n, dtype=np.int32)
-        idx_i = TensorIndex(u1, charges, FlowDirection.IN,  label="i")
+        idx_i = TensorIndex(u1, charges, FlowDirection.IN, label="i")
         idx_j_out = TensorIndex(u1, charges, FlowDirection.OUT, label="j")
-        idx_j_in  = TensorIndex(u1, charges, FlowDirection.IN,  label="j")
+        idx_j_in = TensorIndex(u1, charges, FlowDirection.IN, label="j")
 
         M_data = jax.random.normal(rng, (n, n))
         v_data = jax.random.normal(jax.random.PRNGKey(1), (n,))
@@ -116,14 +119,20 @@ class TestContractDense:
         A_data = jax.random.normal(rng, (n, n))
         B_data = jax.random.normal(jax.random.PRNGKey(10), (n, n))
 
-        A = DenseTensor(A_data, (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="i"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
-        ))
-        B = DenseTensor(B_data, (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="j"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="k"),
-        ))
+        A = DenseTensor(
+            A_data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="i"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
+            ),
+        )
+        B = DenseTensor(
+            B_data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="j"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="k"),
+            ),
+        )
 
         result = contract(A, B)
         expected = A_data @ B_data
@@ -136,10 +145,13 @@ class TestContractDense:
         charges = np.zeros(n, dtype=np.int32)
         M_data = jax.random.normal(rng, (n, n))
 
-        M = DenseTensor(M_data, (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="i"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="i"),  # same label!
-        ))
+        M = DenseTensor(
+            M_data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="i"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="i"),  # same label!
+            ),
+        )
 
         result = contract(M)
         expected = jnp.trace(M_data)
@@ -152,8 +164,12 @@ class TestContractDense:
         a_data = jax.random.normal(rng, (n,))
         b_data = jax.random.normal(jax.random.PRNGKey(7), (n,))
 
-        a = DenseTensor(a_data, (TensorIndex(u1, charges, FlowDirection.IN, label="i"),))
-        b = DenseTensor(b_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),))
+        a = DenseTensor(
+            a_data, (TensorIndex(u1, charges, FlowDirection.IN, label="i"),)
+        )
+        b = DenseTensor(
+            b_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),)
+        )
 
         result = contract(a, b)
         expected = jnp.outer(a_data, b_data)
@@ -167,8 +183,12 @@ class TestContractDense:
         a_data = jax.random.normal(rng, (n,))
         b_data = jax.random.normal(jax.random.PRNGKey(8), (n,))
 
-        a = DenseTensor(a_data, (TensorIndex(u1, charges, FlowDirection.IN, label="i"),))
-        b = DenseTensor(b_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),))
+        a = DenseTensor(
+            a_data, (TensorIndex(u1, charges, FlowDirection.IN, label="i"),)
+        )
+        b = DenseTensor(
+            b_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),)
+        )
 
         result_ij = contract(a, b, output_labels=["i", "j"])
         result_ji = contract(a, b, output_labels=["j", "i"])
@@ -186,7 +206,9 @@ class TestContractDense:
 
     def test_mixed_types_raises(self, u1, rng, u1_sym_tensor_2leg):
         charges = np.zeros(3, dtype=np.int32)
-        dense = DenseTensor(jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="x"),))
+        dense = DenseTensor(
+            jnp.ones((3,)), (TensorIndex(u1, charges, FlowDirection.IN, label="x"),)
+        )
         with pytest.raises(TypeError, match="mix"):
             contract(dense, u1_sym_tensor_2leg)
 
@@ -197,6 +219,7 @@ class TestContractDense:
     def test_opt_einsum_called(self, monkeypatch, u1, rng):
         """Verify opt_einsum.contract_path is invoked."""
         import opt_einsum
+
         call_count = [0]
         original = opt_einsum.contract_path
 
@@ -209,12 +232,17 @@ class TestContractDense:
         n = 3
         charges = np.zeros(n, dtype=np.int32)
         A_data = jax.random.normal(rng, (n, n))
-        A = DenseTensor(A_data, (
-            TensorIndex(u1, charges, FlowDirection.IN, label="i"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
-        ))
+        A = DenseTensor(
+            A_data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="i"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
+            ),
+        )
         B_data = jax.random.normal(jax.random.PRNGKey(2), (n,))
-        B = DenseTensor(B_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),))
+        B = DenseTensor(
+            B_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),)
+        )
 
         contract(A, B)
         assert call_count[0] > 0
@@ -226,24 +254,34 @@ class TestContractDense:
         n = 4
         charges = np.zeros(n, dtype=np.int32)
         A_data = jax.random.normal(rng, (n, n))
-        A = DenseTensor(A_data, (
-            TensorIndex(u1, charges, FlowDirection.IN, label="i"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
-        ))
+        A = DenseTensor(
+            A_data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="i"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
+            ),
+        )
         B_data = jax.random.normal(jax.random.PRNGKey(99), (n,))
-        B = DenseTensor(B_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),))
+        B = DenseTensor(
+            B_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),)
+        )
 
         contract(A, B)
         info_after_first = _cached_contraction_path.cache_info()
 
         # Second call with different data but same shapes → cache hit
         A2_data = jax.random.normal(jax.random.PRNGKey(100), (n, n))
-        A2 = DenseTensor(A2_data, (
-            TensorIndex(u1, charges, FlowDirection.IN, label="i"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
-        ))
+        A2 = DenseTensor(
+            A2_data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="i"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
+            ),
+        )
         B2_data = jax.random.normal(jax.random.PRNGKey(101), (n,))
-        B2 = DenseTensor(B2_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),))
+        B2 = DenseTensor(
+            B2_data, (TensorIndex(u1, charges, FlowDirection.IN, label="j"),)
+        )
 
         contract(A2, B2)
         info_after_second = _cached_contraction_path.cache_info()
@@ -259,14 +297,20 @@ class TestContractDense:
         A_data = jax.random.normal(rng, (n, n))
         B_data = jax.random.normal(jax.random.PRNGKey(50), (n, n))
 
-        A = DenseTensor(A_data, (
-            TensorIndex(u1, charges, FlowDirection.IN, label="i"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
-        ))
-        B = DenseTensor(B_data, (
-            TensorIndex(u1, charges, FlowDirection.IN, label="j"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="k"),
-        ))
+        A = DenseTensor(
+            A_data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="i"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="j"),
+            ),
+        )
+        B = DenseTensor(
+            B_data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="j"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="k"),
+            ),
+        )
 
         # First call (cache miss)
         result1 = contract(A, B)
@@ -279,6 +323,7 @@ class TestContractDense:
 # ------------------------------------------------------------------ #
 # Symmetric contraction                                                #
 # ------------------------------------------------------------------ #
+
 
 class TestContractSymmetric:
     def test_matches_dense_contraction(self, u1_sym_tensor_pair, u1, rng):
@@ -314,16 +359,14 @@ class TestContractSymmetric:
         result = contract(A, B)
         for key in result.blocks:
             # Determine flows from output indices
-            net = sum(
-                int(idx.flow) * int(q)
-                for idx, q in zip(result.indices, key)
-            )
+            net = sum(int(idx.flow) * int(q) for idx, q in zip(result.indices, key))
             assert net == u1.identity(), f"Block {key} violates conservation"
 
 
 # ------------------------------------------------------------------ #
 # Truncated SVD                                                        #
 # ------------------------------------------------------------------ #
+
 
 class TestTruncatedSVD:
     def test_reconstruction_dense(self, u1, rng):
@@ -332,13 +375,17 @@ class TestTruncatedSVD:
         charges_n = np.zeros(n, dtype=np.int32)
         charges_m = np.zeros(m, dtype=np.int32)
         data = jax.random.normal(rng, (n, m))
-        t = DenseTensor(data, (
-            TensorIndex(u1, charges_n, FlowDirection.IN,  label="row"),
-            TensorIndex(u1, charges_m, FlowDirection.OUT, label="col"),
-        ))
+        t = DenseTensor(
+            data,
+            (
+                TensorIndex(u1, charges_n, FlowDirection.IN, label="row"),
+                TensorIndex(u1, charges_m, FlowDirection.OUT, label="col"),
+            ),
+        )
 
-        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                     new_bond_label="bond")
+        U, s, Vh, _ = truncated_svd(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         # Reconstruct: U[row, bond] * s[bond] * Vh[bond, col]
         recon = U.todense() * s[None, :] @ Vh.todense()
@@ -349,14 +396,22 @@ class TestTruncatedSVD:
         n = 6
         charges = np.zeros(n, dtype=np.int32)
         data = jax.random.normal(rng, (n, n))
-        t = DenseTensor(data, (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="left"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="right"),
-        ))
+        t = DenseTensor(
+            data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="left"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="right"),
+            ),
+        )
 
         max_chi = 3
-        U, s, Vh, _ = truncated_svd(t, left_labels=["left"], right_labels=["right"],
-                                      new_bond_label="bond", max_singular_values=max_chi)
+        U, s, Vh, _ = truncated_svd(
+            t,
+            left_labels=["left"],
+            right_labels=["right"],
+            new_bond_label="bond",
+            max_singular_values=max_chi,
+        )
         assert len(s) <= max_chi
         assert "bond" in U.labels()
         assert "bond" in Vh.labels()
@@ -365,38 +420,54 @@ class TestTruncatedSVD:
         n = 5
         charges = np.zeros(n, dtype=np.int32)
         data = jax.random.normal(rng, (n, n))
-        t = DenseTensor(data, (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="a"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="b"),
-        ))
-        _, s, _, _ = truncated_svd(t, left_labels=["a"], right_labels=["b"],
-                                    new_bond_label="bond")
+        t = DenseTensor(
+            data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="a"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="b"),
+            ),
+        )
+        _, s, _, _ = truncated_svd(
+            t, left_labels=["a"], right_labels=["b"], new_bond_label="bond"
+        )
         s_np = np.array(s)
         assert np.all(s_np >= 0), "Singular values should be non-negative"
         assert np.all(np.diff(s_np) <= 1e-5), "Singular values should be non-increasing"
 
     def test_wrong_labels_raises(self, small_dense_matrix):
         with pytest.raises(ValueError):
-            truncated_svd(small_dense_matrix, left_labels=["row"], right_labels=["nonexistent"],
-                          new_bond_label="bond")
+            truncated_svd(
+                small_dense_matrix,
+                left_labels=["row"],
+                right_labels=["nonexistent"],
+                new_bond_label="bond",
+            )
 
     def test_overlapping_labels_raises(self, small_dense_matrix):
         with pytest.raises(ValueError, match="disjoint"):
-            truncated_svd(small_dense_matrix, left_labels=["row", "col"],
-                          right_labels=["col"], new_bond_label="bond")
+            truncated_svd(
+                small_dense_matrix,
+                left_labels=["row", "col"],
+                right_labels=["col"],
+                new_bond_label="bond",
+            )
 
     def test_new_bond_label_propagates(self, u1, rng):
         """The new bond should get the specified label."""
         n = 4
         charges = np.zeros(n, dtype=np.int32)
         data = jax.random.normal(rng, (n, n))
-        t = DenseTensor(data, (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="left"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="right"),
-        ))
+        t = DenseTensor(
+            data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="left"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="right"),
+            ),
+        )
 
-        U, _, Vh, _ = truncated_svd(t, left_labels=["left"], right_labels=["right"],
-                                      new_bond_label="my_bond")
+        U, _, Vh, _ = truncated_svd(
+            t, left_labels=["left"], right_labels=["right"], new_bond_label="my_bond"
+        )
         assert "my_bond" in U.labels()
         assert "my_bond" in Vh.labels()
 
@@ -406,15 +477,21 @@ class TestTruncatedSVD:
         charges_n = np.zeros(n, dtype=np.int32)
         charges_m = np.zeros(m, dtype=np.int32)
         data = jax.random.normal(rng, (n, m))
-        t = DenseTensor(data, (
-            TensorIndex(u1, charges_n, FlowDirection.IN,  label="row"),
-            TensorIndex(u1, charges_m, FlowDirection.OUT, label="col"),
-        ))
+        t = DenseTensor(
+            data,
+            (
+                TensorIndex(u1, charges_n, FlowDirection.IN, label="row"),
+                TensorIndex(u1, charges_m, FlowDirection.OUT, label="col"),
+            ),
+        )
 
         max_chi = 3
         _, s_trunc, _, s_full = truncated_svd(
-            t, left_labels=["row"], right_labels=["col"],
-            new_bond_label="bond", max_singular_values=max_chi,
+            t,
+            left_labels=["row"],
+            right_labels=["col"],
+            new_bond_label="bond",
+            max_singular_values=max_chi,
         )
 
         # s_full should have min(n, m) entries (all singular values)
@@ -426,7 +503,9 @@ class TestTruncatedSVD:
 
         # s_trunc should be a prefix of s_full (same top singular values)
         np.testing.assert_allclose(
-            np.array(s_trunc), np.array(s_full[:max_chi]), rtol=1e-6,
+            np.array(s_trunc),
+            np.array(s_full[:max_chi]),
+            rtol=1e-6,
         )
 
         # s_full should match an independent SVD
@@ -438,13 +517,19 @@ class TestTruncatedSVD:
         n = 5
         charges = np.zeros(n, dtype=np.int32)
         data = jax.random.normal(rng, (n, n))
-        t = DenseTensor(data, (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="a"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="b"),
-        ))
+        t = DenseTensor(
+            data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="a"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="b"),
+            ),
+        )
 
         _, s, _, s_full = truncated_svd(
-            t, left_labels=["a"], right_labels=["b"], new_bond_label="bond",
+            t,
+            left_labels=["a"],
+            right_labels=["b"],
+            new_bond_label="bond",
         )
 
         np.testing.assert_allclose(np.array(s), np.array(s_full), rtol=1e-6)
@@ -454,6 +539,7 @@ class TestTruncatedSVD:
 # QR decomposition                                                     #
 # ------------------------------------------------------------------ #
 
+
 class TestQRDecompose:
     def test_reconstruction(self, u1, rng):
         """Q @ R should reconstruct the original matrix."""
@@ -461,13 +547,17 @@ class TestQRDecompose:
         charges_n = np.zeros(n, dtype=np.int32)
         charges_m = np.zeros(m, dtype=np.int32)
         data = jax.random.normal(rng, (n, m))
-        t = DenseTensor(data, (
-            TensorIndex(u1, charges_n, FlowDirection.IN,  label="row"),
-            TensorIndex(u1, charges_m, FlowDirection.OUT, label="col"),
-        ))
+        t = DenseTensor(
+            data,
+            (
+                TensorIndex(u1, charges_n, FlowDirection.IN, label="row"),
+                TensorIndex(u1, charges_m, FlowDirection.OUT, label="col"),
+            ),
+        )
 
-        Q, R = qr_decompose(t, left_labels=["row"], right_labels=["col"],
-                             new_bond_label="bond")
+        Q, R = qr_decompose(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         recon = Q.todense() @ R.todense()
         np.testing.assert_allclose(recon, data, rtol=1e-4, atol=1e-4)
@@ -477,13 +567,17 @@ class TestQRDecompose:
         n = 5
         charges = np.zeros(n, dtype=np.int32)
         data = jax.random.normal(rng, (n, n))
-        t = DenseTensor(data, (
-            TensorIndex(u1, charges, FlowDirection.IN,  label="a"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="b"),
-        ))
+        t = DenseTensor(
+            data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="a"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="b"),
+            ),
+        )
 
-        Q, R = qr_decompose(t, left_labels=["a"], right_labels=["b"],
-                             new_bond_label="bond")
+        Q, R = qr_decompose(
+            t, left_labels=["a"], right_labels=["b"], new_bond_label="bond"
+        )
         Q_dense = Q.todense()
         QtQ = Q_dense.T @ Q_dense
         np.testing.assert_allclose(QtQ, np.eye(QtQ.shape[0]), atol=1e-5)
@@ -492,12 +586,16 @@ class TestQRDecompose:
         n = 4
         charges = np.zeros(n, dtype=np.int32)
         data = jax.random.normal(rng, (n, n))
-        t = DenseTensor(data, (
-            TensorIndex(u1, charges, FlowDirection.IN, label="x"),
-            TensorIndex(u1, charges, FlowDirection.OUT, label="y"),
-        ))
-        Q, R = qr_decompose(t, left_labels=["x"], right_labels=["y"],
-                             new_bond_label="qr_bond")
+        t = DenseTensor(
+            data,
+            (
+                TensorIndex(u1, charges, FlowDirection.IN, label="x"),
+                TensorIndex(u1, charges, FlowDirection.OUT, label="y"),
+            ),
+        )
+        Q, R = qr_decompose(
+            t, left_labels=["x"], right_labels=["y"], new_bond_label="qr_bond"
+        )
         assert "qr_bond" in Q.labels()
         assert "qr_bond" in R.labels()
 
@@ -505,6 +603,7 @@ class TestQRDecompose:
 # ------------------------------------------------------------------ #
 # Symmetric (block-sparse) Truncated SVD                               #
 # ------------------------------------------------------------------ #
+
 
 def _make_symmetric_2leg(u1, rng, left_charges, right_charges, left_label, right_label):
     """Helper: build a 2-leg U(1)-symmetric tensor with given charges."""
@@ -534,8 +633,9 @@ class TestTruncatedSVDSymmetric:
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
         original_dense = t.todense()
 
-        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                     new_bond_label="bond")
+        U, s, Vh, _ = truncated_svd(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         recon = U.todense() * s[None, :] @ Vh.todense()
         np.testing.assert_allclose(recon, original_dense, rtol=1e-4, atol=1e-6)
@@ -545,8 +645,9 @@ class TestTruncatedSVDSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                     new_bond_label="bond")
+        U, s, Vh, _ = truncated_svd(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         assert isinstance(U, SymmetricTensor)
         assert isinstance(Vh, SymmetricTensor)
@@ -556,8 +657,9 @@ class TestTruncatedSVDSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                     new_bond_label="bond")
+        U, s, Vh, _ = truncated_svd(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         # Find bond index on U (last index)
         bond_idx = U.indices[-1]
@@ -573,8 +675,9 @@ class TestTruncatedSVDSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        _, s_sym, _, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                       new_bond_label="bond")
+        _, s_sym, _, _ = truncated_svd(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         # Dense SVD of the same tensor
         dense = t.todense()
@@ -592,8 +695,13 @@ class TestTruncatedSVDSymmetric:
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
         max_chi = 2
-        U, s, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                     new_bond_label="bond", max_singular_values=max_chi)
+        U, s, Vh, _ = truncated_svd(
+            t,
+            left_labels=["row"],
+            right_labels=["col"],
+            new_bond_label="bond",
+            max_singular_values=max_chi,
+        )
 
         assert len(s) <= max_chi
         # Bond dimension on U and Vh should match
@@ -606,7 +714,9 @@ class TestTruncatedSVDSymmetric:
         original_dense = t.todense()
 
         U, s, Vh, _ = truncated_svd(
-            t, left_labels=["phys", "left"], right_labels=["right"],
+            t,
+            left_labels=["phys", "left"],
+            right_labels=["right"],
             new_bond_label="bond",
         )
 
@@ -627,14 +737,14 @@ class TestTruncatedSVDSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        U, _, Vh, _ = truncated_svd(t, left_labels=["row"], right_labels=["col"],
-                                     new_bond_label="bond")
+        U, _, Vh, _ = truncated_svd(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         for tensor_out in (U, Vh):
             for key in tensor_out.blocks:
                 net = sum(
-                    int(idx.flow) * int(q)
-                    for idx, q in zip(tensor_out.indices, key)
+                    int(idx.flow) * int(q) for idx, q in zip(tensor_out.indices, key)
                 )
                 assert net == u1.identity(), (
                     f"Block {key} violates conservation: net={net}"
@@ -645,6 +755,7 @@ class TestTruncatedSVDSymmetric:
 # Symmetric (block-sparse) QR                                          #
 # ------------------------------------------------------------------ #
 
+
 class TestQRSymmetric:
     def test_reconstruction(self, u1, rng):
         """contract(Q, R) should reconstruct the original SymmetricTensor."""
@@ -652,8 +763,9 @@ class TestQRSymmetric:
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
         original_dense = t.todense()
 
-        Q, R = qr_decompose(t, left_labels=["row"], right_labels=["col"],
-                              new_bond_label="bond")
+        Q, R = qr_decompose(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         recon = Q.todense() @ R.todense()
         np.testing.assert_allclose(recon, original_dense, rtol=1e-4, atol=1e-6)
@@ -663,8 +775,9 @@ class TestQRSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        Q, _ = qr_decompose(t, left_labels=["row"], right_labels=["col"],
-                              new_bond_label="bond")
+        Q, _ = qr_decompose(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         Q_dense = Q.todense()
         QtQ = Q_dense.T.conj() @ Q_dense
@@ -675,8 +788,9 @@ class TestQRSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        Q, R = qr_decompose(t, left_labels=["row"], right_labels=["col"],
-                              new_bond_label="bond")
+        Q, R = qr_decompose(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         assert isinstance(Q, SymmetricTensor)
         assert isinstance(R, SymmetricTensor)
@@ -687,7 +801,9 @@ class TestQRSymmetric:
         original_dense = t.todense()
 
         Q, R = qr_decompose(
-            t, left_labels=["phys", "left"], right_labels=["right"],
+            t,
+            left_labels=["phys", "left"],
+            right_labels=["right"],
             new_bond_label="bond",
         )
 
@@ -702,14 +818,14 @@ class TestQRSymmetric:
         charges = np.array([-1, 0, 1], dtype=np.int32)
         t = _make_symmetric_2leg(u1, rng, charges, charges, "row", "col")
 
-        Q, R = qr_decompose(t, left_labels=["row"], right_labels=["col"],
-                              new_bond_label="bond")
+        Q, R = qr_decompose(
+            t, left_labels=["row"], right_labels=["col"], new_bond_label="bond"
+        )
 
         for tensor_out in (Q, R):
             for key in tensor_out.blocks:
                 net = sum(
-                    int(idx.flow) * int(q)
-                    for idx, q in zip(tensor_out.indices, key)
+                    int(idx.flow) * int(q) for idx, q in zip(tensor_out.indices, key)
                 )
                 assert net == u1.identity(), (
                     f"Block {key} violates conservation: net={net}"

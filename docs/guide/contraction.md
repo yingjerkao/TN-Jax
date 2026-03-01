@@ -9,7 +9,7 @@ The core idea: **legs with the same label across different tensors are
 automatically summed over**.
 
 ```python
-from tnjax import contract
+from tenax import contract
 
 # A has legs ("i", "bond"), B has legs ("bond", "j")
 C = contract(A, B)
@@ -50,7 +50,7 @@ C = contract(A, B, optimize="optimal")    # brute-force optimal
 `truncated_svd` decomposes a tensor into U, s, V^dagger with truncation:
 
 ```python
-from tnjax import truncated_svd
+from tenax import truncated_svd
 
 # Split tensor T with legs ("left", "phys", "right") along the cut
 # left_labels vs right_labels
@@ -82,7 +82,7 @@ the SVD is performed block-by-block within each charge sector.
 triangular factor R:
 
 ```python
-from tnjax import qr_decompose
+from tenax import qr_decompose
 
 Q, R = qr_decompose(
     T,
@@ -103,7 +103,7 @@ For full control, `contract_with_subscripts` accepts explicit einsum
 subscript strings:
 
 ```python
-from tnjax import contract_with_subscripts
+from tenax import contract_with_subscripts
 
 result = contract_with_subscripts(
     [A, B],

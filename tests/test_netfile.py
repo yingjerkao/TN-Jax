@@ -6,10 +6,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor
-from tnjax.network.netfile import (
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry
+from tenax.core.tensor import DenseTensor
+from tenax.network.netfile import (
     NetworkBlueprint,
     _labels_to_subscripts_from_names,
     _parse_order,
@@ -21,7 +21,10 @@ from tnjax.network.netfile import (
 # Helper: make a simple DenseTensor with trivial symmetry
 # ===================================================================
 
-def _make_dense(shape: tuple[int, ...], labels: tuple[str, ...], seed: int = 0) -> DenseTensor:
+
+def _make_dense(
+    shape: tuple[int, ...], labels: tuple[str, ...], seed: int = 0
+) -> DenseTensor:
     """Create a DenseTensor with the given shape, labels, and deterministic data."""
     u1 = U1Symmetry()
     rng = np.random.RandomState(seed)
@@ -36,6 +39,7 @@ def _make_dense(shape: tuple[int, ...], labels: tuple[str, ...], seed: int = 0) 
 # ===================================================================
 # Parser tests
 # ===================================================================
+
 
 class TestParseNetfile:
     def test_two_tensors(self):
@@ -99,6 +103,7 @@ class TestParseNetfile:
 # ORDER parser tests
 # ===================================================================
 
+
 class TestParseOrder:
     def test_simple_pair(self):
         steps = _parse_order("(A,B)", {"A", "B"})
@@ -128,6 +133,7 @@ class TestParseOrder:
 # ===================================================================
 # Subscript pre-computation tests
 # ===================================================================
+
 
 class TestLabelsToSubscripts:
     def test_matrix_multiply(self):
@@ -177,6 +183,7 @@ class TestLabelsToSubscripts:
 # ===================================================================
 # Blueprint lifecycle tests
 # ===================================================================
+
 
 class TestNetworkBlueprint:
     def test_basic_lifecycle(self):
@@ -262,6 +269,7 @@ class TestNetworkBlueprint:
 # Numerical correctness
 # ===================================================================
 
+
 class TestNumericalCorrectness:
     def test_matrix_multiply_matches_einsum(self):
         A = _make_dense((3, 4), ("i", "j"), seed=10)
@@ -318,7 +326,11 @@ class TestNumericalCorrectness:
 
         expected = jnp.einsum(
             "abc,apqd,bpse,eqtf,dfg->cstg",
-            L.todense(), M1.todense(), A.todense(), M2.todense(), R.todense(),
+            L.todense(),
+            M1.todense(),
+            A.todense(),
+            M2.todense(),
+            R.todense(),
         )
         np.testing.assert_allclose(result.todense(), expected, atol=1e-4)
 
@@ -326,6 +338,7 @@ class TestNumericalCorrectness:
 # ===================================================================
 # ORDER vs no-ORDER consistency
 # ===================================================================
+
 
 class TestOrderConsistency:
     def test_two_tensors_with_and_without_order(self):
@@ -381,6 +394,7 @@ class TestOrderConsistency:
 # Convenience function
 # ===================================================================
 
+
 class TestFromNetfile:
     def test_from_netfile(self):
         bp = from_netfile("A: i, j\nB: j, k")
@@ -391,6 +405,7 @@ class TestFromNetfile:
 # ===================================================================
 # to_tensor_network interop
 # ===================================================================
+
 
 class TestToTensorNetwork:
     def test_to_tensor_network_contracts_same(self):

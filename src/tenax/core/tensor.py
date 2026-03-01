@@ -23,7 +23,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tnjax.core.index import Label, TensorIndex
+from tenax.core.index import Label, TensorIndex
 
 # Block key: tuple of one charge value per leg identifying a charge sector
 BlockKey = tuple[int, ...]
@@ -74,9 +74,7 @@ def _compute_valid_blocks(
     identity = sym.identity()
 
     # Collect unique charge values per leg (sorted for determinism)
-    unique_charges_per_leg = [
-        sorted(set(idx.charges.tolist())) for idx in indices
-    ]
+    unique_charges_per_leg = [sorted(set(idx.charges.tolist())) for idx in indices]
 
     n_legs = len(indices)
 
@@ -86,8 +84,11 @@ def _compute_valid_blocks(
 
     if n_legs == 1:
         # Single leg: only identity charge is valid
-        return [(q,) for q in unique_charges_per_leg[0]
-                if int(indices[0].flow) * q == identity]
+        return [
+            (q,)
+            for q in unique_charges_per_leg[0]
+            if int(indices[0].flow) * q == identity
+        ]
 
     # Incremental propagation: partial_combos maps
     #   running_fused_charge -> list of partial BlockKey tuples
@@ -107,10 +108,12 @@ def _compute_valid_blocks(
             effective_q = flow_i * q
             # For each existing partial sum, fuse with this leg's charge
             for prev_fused, prev_combos in partial.items():
-                new_fused = int(sym.fuse(
-                    np.array([prev_fused], dtype=np.int32),
-                    np.array([effective_q], dtype=np.int32),
-                )[0])
+                new_fused = int(
+                    sym.fuse(
+                        np.array([prev_fused], dtype=np.int32),
+                        np.array([effective_q], dtype=np.int32),
+                    )[0]
+                )
                 extended = [combo + (q,) for combo in prev_combos]
                 if new_fused in next_partial:
                     next_partial[new_fused].extend(extended)
@@ -130,9 +133,7 @@ def _compute_valid_blocks(
             # We need: fuse(prev_fused, flow_last * q_last) == identity
             # For U1: prev_fused + flow_last * q_last == 0
             # => q_last = -prev_fused / flow_last
-            needed_effective = int(sym.dual(
-                np.array([prev_fused], dtype=np.int32)
-            )[0])
+            needed_effective = int(sym.dual(np.array([prev_fused], dtype=np.int32))[0])
             if flow_last == 0:
                 continue
             # needed_effective = flow_last * q_last => q_last = needed_effective / flow_last
@@ -146,10 +147,12 @@ def _compute_valid_blocks(
         for q in unique_charges_per_leg[last_leg_idx]:
             effective_q = flow_last * q
             for prev_fused, prev_combos in partial.items():
-                total = int(sym.fuse(
-                    np.array([prev_fused], dtype=np.int32),
-                    np.array([effective_q], dtype=np.int32),
-                )[0])
+                total = int(
+                    sym.fuse(
+                        np.array([prev_fused], dtype=np.int32),
+                        np.array([effective_q], dtype=np.int32),
+                    )[0]
+                )
                 if total == identity:
                     for combo in prev_combos:
                         valid_keys.append(combo + (q,))
@@ -181,6 +184,7 @@ def _block_slices(
 
 
 # ---------- Tensor Protocol ----------
+
 
 class Tensor:
     """Structural base class (duck-typed protocol) for tensor objects.
@@ -245,6 +249,7 @@ class Tensor:
 
 
 # ---------- DenseTensor ----------
+
 
 @jax.tree_util.register_pytree_node_class
 class DenseTensor(Tensor):
@@ -358,7 +363,9 @@ class DenseTensor(Tensor):
             else:
                 new_indices.append(idx)
         if not found:
-            raise KeyError(f"Label {old!r} not found in tensor with labels {self.labels()}")
+            raise KeyError(
+                f"Label {old!r} not found in tensor with labels {self.labels()}"
+            )
         return DenseTensor(self._data, tuple(new_indices))
 
     def relabels(self, mapping: dict[Label, Label]) -> DenseTensor:
@@ -385,6 +392,7 @@ class DenseTensor(Tensor):
 
 
 # ---------- SymmetricTensor ----------
+
 
 @jax.tree_util.register_pytree_node_class
 class SymmetricTensor(Tensor):
@@ -630,7 +638,9 @@ class SymmetricTensor(Tensor):
             return jnp.zeros(shape, dtype=self.dtype)
 
         # Start from zeros and fill blocks
-        np_dtype = np.dtype(self.dtype) if not isinstance(self.dtype, np.dtype) else self.dtype
+        np_dtype = (
+            np.dtype(self.dtype) if not isinstance(self.dtype, np.dtype) else self.dtype
+        )
         result = np.zeros(shape, dtype=np_dtype)
         for key, block in self._blocks.items():
             masks, _ = _block_slices(self._indices, key)
@@ -664,7 +674,9 @@ class SymmetricTensor(Tensor):
         new_indices = tuple(idx.dual() for idx in self._indices)
         new_blocks: dict[BlockKey, jax.Array] = {}
         for key, block in self._blocks.items():
-            new_key = tuple(int(sym.dual(np.array([q]))[0]) for q in key) if sym else key
+            new_key = (
+                tuple(int(sym.dual(np.array([q]))[0]) for q in key) if sym else key
+            )
             val = jnp.conj(block)
             if sym is not None and sym.is_fermionic:
                 twist = 1.0

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tnjax import DMRGConfig, build_mpo_heisenberg, build_random_mps, dmrg
+from tenax import DMRGConfig, build_mpo_heisenberg, build_random_mps, dmrg
 
 _SIZES = {
     "small": {"L": 20, "chi": 32, "sweeps": 5, "init_bond_dim": 8},
