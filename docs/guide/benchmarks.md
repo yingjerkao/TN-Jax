@@ -149,8 +149,8 @@ Columns: `algorithm`, `size_label`, `backend`, `dtype`, `warmup_time_s`,
 | Backend | dtype | Notes |
 |---------|-------|-------|
 | `cpu` | float64 | Full x64 precision, single-threaded by default |
-| `cuda` / `gpu` | float64 | Requires `tenax[cuda12]` or `tenax[cuda13]` |
-| `tpu` | float64 | Requires `tenax[tpu]` in a TPU VM |
+| `cuda` / `gpu` | float64 | Requires `tenax-tn[cuda12]` or `tenax-tn[cuda13]` |
+| `tpu` | float64 | Requires `tenax-tn[tpu]` in a TPU VM |
 | `metal` | float32 | Apple Silicon; limited float64 support, uses float32 automatically |
 | `auto` | float64 | Lets JAX pick the best available backend |
 

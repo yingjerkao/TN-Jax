@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/tenax
+      url: https://test.pypi.org/p/tenax-tn
 
     steps:
       - name: Download artifacts
@@ -51,8 +51,8 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
           # OIDC trusted publishing: no API token needed.
-          # Configure at https://test.pypi.org/manage/project/tenax/settings/publishing/
-          # Set: owner=<your-github-user>, repo=tenax, workflow=publish.yml, env=testpypi
+          # Configure at https://test.pypi.org/manage/project/tenax-tn/settings/publishing/
+          # Set: owner=tenax-lab, repo=tenax, workflow=publish.yml, env=testpypi
 
   publish-pypi:
     name: Publish to PyPI
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/tenax
+      url: https://pypi.org/p/tenax-tn
 
     steps:
       - name: Download artifacts
@@ -72,5 +72,5 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         # OIDC trusted publishing: configure at
-        # https://pypi.org/manage/project/tenax/settings/publishing/
-        # Set: owner=<your-github-user>, repo=tenax, workflow=publish.yml, env=pypi
+        # https://pypi.org/manage/project/tenax-tn/settings/publishing/
+        # Set: owner=tenax-lab, repo=tenax, workflow=publish.yml, env=pypi

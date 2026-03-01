@@ -21,25 +21,25 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 
 ```bash
 # CPU only (default)
-pip install tenax
+pip install tenax-tn
 
 # NVIDIA GPU (CUDA 13)
-pip install tenax[cuda13]
+pip install tenax-tn[cuda13]
 
 # NVIDIA GPU (CUDA 12)
-pip install tenax[cuda12]
+pip install tenax-tn[cuda12]
 
 # Google Cloud TPU
-pip install tenax[tpu]
+pip install tenax-tn[tpu]
 
 # Apple Silicon GPU (macOS, experimental)
-pip install tenax[metal]
+pip install tenax-tn[metal]
 ```
 
 For development:
 
 ```bash
-git clone https://github.com/yingjerkao/Tenax.git
+git clone https://github.com/tenax-lab/tenax.git
 cd Tenax
 uv sync --all-extras --dev
 ```
@@ -380,7 +380,7 @@ device info) to JSON. See `docs/guide/benchmarks.md` for the complete guide.
 
 ```bash
 # Clone and install with dev dependencies
-git clone https://github.com/yingjerkao/Tenax
+git clone https://github.com/tenax-lab/tenax
 cd Tenax
 uv sync --all-extras --dev
 

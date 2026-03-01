@@ -8,14 +8,14 @@
 ## Install with pip
 
 ```bash
-pip install tenax
+pip install tenax-tn
 ```
 
 ## Install with uv (recommended for development)
 
 ```bash
 # Clone the repository
-git clone https://github.com/yingjerkao/Tenax.git
+git clone https://github.com/tenax-lab/tenax.git
 cd Tenax
 
 # Install in development mode with all extras
@@ -29,20 +29,20 @@ enable GPU or TPU acceleration:
 
 ```bash
 # NVIDIA GPU (CUDA 13, recommended)
-pip install tenax[cuda13]
+pip install tenax-tn[cuda13]
 
 # NVIDIA GPU (CUDA 12)
-pip install tenax[cuda12]
+pip install tenax-tn[cuda12]
 
 # NVIDIA GPU with locally installed CUDA
-pip install tenax[cuda12-local]
-pip install tenax[cuda13-local]
+pip install tenax-tn[cuda12-local]
+pip install tenax-tn[cuda13-local]
 
 # Google Cloud TPU
-pip install tenax[tpu]
+pip install tenax-tn[tpu]
 
 # Apple Silicon GPU (macOS only, experimental)
-pip install tenax[metal]
+pip install tenax-tn[metal]
 ```
 
 For AMD ROCm GPUs, install JAX with ROCm support separately following
@@ -51,7 +51,7 @@ then install Tenax on top:
 
 ```bash
 # After installing jax+jaxlib with ROCm
-pip install tenax
+pip install tenax-tn
 ```
 
 See the [JAX installation guide](https://docs.jax.dev/en/latest/installation.html) for the latest accelerator options.

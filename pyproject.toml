@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tenax"
+name = "tenax-tn"
 version = "0.1.0"
 description = "JAX-based tensor network library with symmetry-aware block-sparse tensors"
 readme = "README.md"
@@ -53,12 +53,12 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yingjerkao/tenax"
-Repository = "https://github.com/yingjerkao/tenax"
-Issues = "https://github.com/yingjerkao/tenax/issues"
+Homepage = "https://github.com/tenax-lab/tenax"
+Repository = "https://github.com/tenax-lab/tenax"
+Issues = "https://github.com/tenax-lab/tenax/issues"
 
 [dependency-groups]
-dev = ["tenax[dev]"]
+dev = ["tenax-tn[dev]"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tenax"]
