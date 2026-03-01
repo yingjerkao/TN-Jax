@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tnjax import HOTRGConfig, compute_ising_tensor, hotrg
+from tenax import HOTRGConfig, compute_ising_tensor, hotrg
 
 _BETA_C = 0.4407
 

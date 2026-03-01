@@ -5,9 +5,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.contraction.contractor import contract, qr_decompose, truncated_svd
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import (
+from tenax.contraction.contractor import contract, qr_decompose, truncated_svd
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import (
     BraidingStyle,
     FermionicU1,
     FermionParity,
@@ -15,11 +15,12 @@ from tnjax.core.symmetry import (
     U1Symmetry,
     ZnSymmetry,
 )
-from tnjax.core.tensor import SymmetricTensor, _koszul_sign
+from tenax.core.tensor import SymmetricTensor, _koszul_sign
 
 # ------------------------------------------------------------------ #
 # Fixtures                                                             #
 # ------------------------------------------------------------------ #
+
 
 @pytest.fixture
 def fp():
@@ -44,6 +45,7 @@ def rng2():
 # ------------------------------------------------------------------ #
 # BraidingStyle and backward compatibility                             #
 # ------------------------------------------------------------------ #
+
 
 class TestBraidingStyleBackwardCompat:
     def test_u1_is_bosonic(self):
@@ -75,6 +77,7 @@ class TestBraidingStyleBackwardCompat:
 # ------------------------------------------------------------------ #
 # FermionParity                                                        #
 # ------------------------------------------------------------------ #
+
 
 class TestFermionParity:
     def test_braiding_style(self, fp):
@@ -130,6 +133,7 @@ class TestFermionParity:
 # ------------------------------------------------------------------ #
 # FermionicU1                                                          #
 # ------------------------------------------------------------------ #
+
 
 class TestFermionicU1:
     def test_braiding_style(self, fu1):
@@ -202,6 +206,7 @@ class TestFermionicU1:
 # ProductSymmetry                                                      #
 # ------------------------------------------------------------------ #
 
+
 class TestProductSymmetry:
     def test_encode_decode_roundtrip(self):
         for q1, q2 in [(0, 0), (1, 2), (-1, 3), (100, -50), (-32768, 32767)]:
@@ -243,7 +248,9 @@ class TestProductSymmetry:
         )
         result = sym.fuse(a, b)
         r1, r2 = ProductSymmetry.decode_charges(result)
-        np.testing.assert_array_equal(r1, np.array([1, 1], dtype=np.int32))  # (0+1)%2, (1+0)%2
+        np.testing.assert_array_equal(
+            r1, np.array([1, 1], dtype=np.int32)
+        )  # (0+1)%2, (1+0)%2
         np.testing.assert_array_equal(r2, np.array([3, 2], dtype=np.int32))  # 1+2, -1+3
 
     def test_dual(self):
@@ -254,8 +261,12 @@ class TestProductSymmetry:
         )
         result = sym.dual(charges)
         r1, r2 = ProductSymmetry.decode_charges(result)
-        np.testing.assert_array_equal(r1, np.array([0, 1], dtype=np.int32))  # Z2 self-dual
-        np.testing.assert_array_equal(r2, np.array([-3, 2], dtype=np.int32))  # U1 negation
+        np.testing.assert_array_equal(
+            r1, np.array([0, 1], dtype=np.int32)
+        )  # Z2 self-dual
+        np.testing.assert_array_equal(
+            r2, np.array([-3, 2], dtype=np.int32)
+        )  # U1 negation
 
     def test_identity(self):
         sym = ProductSymmetry(FermionParity(), U1Symmetry())
@@ -323,6 +334,7 @@ class TestProductSymmetry:
 # Koszul sign                                                          #
 # ------------------------------------------------------------------ #
 
+
 class TestKoszulSign:
     def test_identity_perm(self):
         assert _koszul_sign([1, 1, 1], (0, 1, 2)) == 1
@@ -360,6 +372,7 @@ class TestKoszulSign:
 # ------------------------------------------------------------------ #
 # Fermionic tensor: transpose roundtrip                                #
 # ------------------------------------------------------------------ #
+
 
 class TestFermionicTranspose:
     def test_transpose_roundtrip(self, fp, rng):
@@ -431,6 +444,7 @@ class TestFermionicTranspose:
 # Fermionic contraction: order independence                            #
 # ------------------------------------------------------------------ #
 
+
 class TestFermionicContraction:
     def test_contraction_fermion_parity(self, fp, rng, rng2):
         """contract(A, B) should give consistent results for FermionParity."""
@@ -450,10 +464,7 @@ class TestFermionicContraction:
         assert isinstance(result, SymmetricTensor)
         # Verify conservation law
         for key in result.blocks:
-            net = sum(
-                int(idx.flow) * int(q)
-                for idx, q in zip(result.indices, key)
-            )
+            net = sum(int(idx.flow) * int(q) for idx, q in zip(result.indices, key))
             assert net % 2 == fp.identity()
 
     def test_contraction_fermionic_u1(self, fu1, rng, rng2):
@@ -474,16 +485,14 @@ class TestFermionicContraction:
         assert isinstance(result, SymmetricTensor)
         # Verify conservation law
         for key in result.blocks:
-            net = sum(
-                int(idx.flow) * int(q)
-                for idx, q in zip(result.indices, key)
-            )
+            net = sum(int(idx.flow) * int(q) for idx, q in zip(result.indices, key))
             assert net == fu1.identity()
 
 
 # ------------------------------------------------------------------ #
 # SVD roundtrip for fermionic tensors                                  #
 # ------------------------------------------------------------------ #
+
 
 class TestFermionicSVD:
     def test_svd_roundtrip_fermion_parity(self, fp, rng):
@@ -533,7 +542,9 @@ class TestFermionicSVD:
         original_dense = t.todense()
 
         U, s, Vh, _ = truncated_svd(
-            t, left_labels=["phys", "left"], right_labels=["right"],
+            t,
+            left_labels=["phys", "left"],
+            right_labels=["right"],
             new_bond_label="bond",
         )
 
@@ -560,6 +571,7 @@ class TestFermionicSVD:
 # ------------------------------------------------------------------ #
 # QR roundtrip for fermionic tensors                                   #
 # ------------------------------------------------------------------ #
+
 
 class TestFermionicQR:
     def test_qr_roundtrip_fermionic_u1(self, fu1, rng):
@@ -596,6 +608,7 @@ class TestFermionicQR:
 # ------------------------------------------------------------------ #
 # Dagger                                                               #
 # ------------------------------------------------------------------ #
+
 
 class TestDagger:
     def test_dagger_bosonic_is_conj_dual(self, rng):

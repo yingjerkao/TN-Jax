@@ -1,8 +1,8 @@
-# TN-Jax
+# Tenax
 
 **JAX-based tensor network library with symmetry-aware block-sparse tensors.**
 
-TN-Jax provides label-based tensor contraction (Cytnx-style), abelian symmetry
+Tenax provides label-based tensor contraction (Cytnx-style), abelian symmetry
 support (U(1), Z_n), and production-ready implementations of DMRG, TRG, HOTRG,
 and iPEPS algorithms.
 

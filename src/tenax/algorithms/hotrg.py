@@ -26,8 +26,8 @@ from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 
-from tnjax.core import LOG_EPS
-from tnjax.core.tensor import DenseTensor, Tensor
+from tenax.core import LOG_EPS
+from tenax.core.tensor import DenseTensor, Tensor
 
 
 @dataclass

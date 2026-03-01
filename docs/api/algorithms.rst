@@ -4,118 +4,118 @@ Algorithms
 DMRG
 ----
 
-.. autoclass:: tnjax.algorithms.dmrg.DMRGConfig
+.. autoclass:: tenax.algorithms.dmrg.DMRGConfig
    :members:
    :no-index:
 
-.. autoclass:: tnjax.algorithms.dmrg.DMRGResult
+.. autoclass:: tenax.algorithms.dmrg.DMRGResult
    :members:
    :no-index:
 
-.. autofunction:: tnjax.algorithms.dmrg.dmrg
+.. autofunction:: tenax.algorithms.dmrg.dmrg
 
-.. autofunction:: tnjax.algorithms.dmrg.build_mpo_heisenberg
+.. autofunction:: tenax.algorithms.dmrg.build_mpo_heisenberg
 
-.. autofunction:: tnjax.algorithms.dmrg.build_random_mps
+.. autofunction:: tenax.algorithms.dmrg.build_random_mps
 
 iDMRG
 -----
 
-.. autoclass:: tnjax.algorithms.idmrg.iDMRGConfig
+.. autoclass:: tenax.algorithms.idmrg.iDMRGConfig
    :members:
    :no-index:
 
-.. autoclass:: tnjax.algorithms.idmrg.iDMRGResult
+.. autoclass:: tenax.algorithms.idmrg.iDMRGResult
    :members:
    :no-index:
 
-.. autofunction:: tnjax.algorithms.idmrg.idmrg
+.. autofunction:: tenax.algorithms.idmrg.idmrg
 
-.. autofunction:: tnjax.algorithms.idmrg.build_bulk_mpo_heisenberg
+.. autofunction:: tenax.algorithms.idmrg.build_bulk_mpo_heisenberg
 
-.. autofunction:: tnjax.algorithms.idmrg.build_bulk_mpo_heisenberg_cylinder
+.. autofunction:: tenax.algorithms.idmrg.build_bulk_mpo_heisenberg_cylinder
 
 TRG
 ---
 
-.. autoclass:: tnjax.algorithms.trg.TRGConfig
+.. autoclass:: tenax.algorithms.trg.TRGConfig
    :members:
    :no-index:
 
-.. autofunction:: tnjax.algorithms.trg.trg
+.. autofunction:: tenax.algorithms.trg.trg
 
-.. autofunction:: tnjax.algorithms.trg.compute_ising_tensor
+.. autofunction:: tenax.algorithms.trg.compute_ising_tensor
 
-.. autofunction:: tnjax.algorithms.trg.ising_free_energy_exact
+.. autofunction:: tenax.algorithms.trg.ising_free_energy_exact
 
 HOTRG
 -----
 
-.. autoclass:: tnjax.algorithms.hotrg.HOTRGConfig
+.. autoclass:: tenax.algorithms.hotrg.HOTRGConfig
    :members:
    :no-index:
 
-.. autofunction:: tnjax.algorithms.hotrg.hotrg
+.. autofunction:: tenax.algorithms.hotrg.hotrg
 
 iPEPS
 -----
 
-.. autoclass:: tnjax.algorithms.ipeps.iPEPSConfig
+.. autoclass:: tenax.algorithms.ipeps.iPEPSConfig
    :members:
    :no-index:
 
-.. autoclass:: tnjax.algorithms.ipeps.CTMConfig
+.. autoclass:: tenax.algorithms.ipeps.CTMConfig
    :members:
    :no-index:
 
-.. autoclass:: tnjax.algorithms.ipeps.CTMEnvironment
+.. autoclass:: tenax.algorithms.ipeps.CTMEnvironment
    :members:
    :no-index:
 
-.. autofunction:: tnjax.algorithms.ipeps.ipeps
+.. autofunction:: tenax.algorithms.ipeps.ipeps
 
-.. autofunction:: tnjax.algorithms.ipeps.ctm
+.. autofunction:: tenax.algorithms.ipeps.ctm
 
-.. autofunction:: tnjax.algorithms.ipeps.ctm_2site
+.. autofunction:: tenax.algorithms.ipeps.ctm_2site
 
-.. autofunction:: tnjax.algorithms.ipeps.compute_energy_ctm_2site
+.. autofunction:: tenax.algorithms.ipeps.compute_energy_ctm_2site
 
-.. autofunction:: tnjax.algorithms.ipeps.optimize_gs_ad
+.. autofunction:: tenax.algorithms.ipeps.optimize_gs_ad
 
 AD Utilities
 ------------
 
-.. autofunction:: tnjax.algorithms.ad_utils.truncated_svd_ad
+.. autofunction:: tenax.algorithms.ad_utils.truncated_svd_ad
 
-.. autofunction:: tnjax.algorithms.ad_utils.ctm_converge
+.. autofunction:: tenax.algorithms.ad_utils.ctm_converge
 
 iPEPS Excitations
 -----------------
 
-.. autoclass:: tnjax.algorithms.ipeps_excitations.ExcitationConfig
+.. autoclass:: tenax.algorithms.ipeps_excitations.ExcitationConfig
    :members:
    :no-index:
 
-.. autoclass:: tnjax.algorithms.ipeps_excitations.ExcitationResult
+.. autoclass:: tenax.algorithms.ipeps_excitations.ExcitationResult
    :members:
    :no-index:
 
-.. autofunction:: tnjax.algorithms.ipeps_excitations.compute_excitations
+.. autofunction:: tenax.algorithms.ipeps_excitations.compute_excitations
 
-.. autofunction:: tnjax.algorithms.ipeps_excitations.make_momentum_path
+.. autofunction:: tenax.algorithms.ipeps_excitations.make_momentum_path
 
 AutoMPO
 -------
 
-.. autoclass:: tnjax.algorithms.auto_mpo.AutoMPO
+.. autoclass:: tenax.algorithms.auto_mpo.AutoMPO
    :members:
 
-.. autoclass:: tnjax.algorithms.auto_mpo.HamiltonianTerm
+.. autoclass:: tenax.algorithms.auto_mpo.HamiltonianTerm
    :members:
    :no-index:
 
-.. autofunction:: tnjax.algorithms.auto_mpo.build_auto_mpo
+.. autofunction:: tenax.algorithms.auto_mpo.build_auto_mpo
 
-.. autofunction:: tnjax.algorithms.auto_mpo.spin_half_ops
+.. autofunction:: tenax.algorithms.auto_mpo.spin_half_ops
 
-.. autofunction:: tnjax.algorithms.auto_mpo.spin_one_ops
+.. autofunction:: tenax.algorithms.auto_mpo.spin_one_ops

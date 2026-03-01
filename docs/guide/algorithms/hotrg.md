@@ -23,7 +23,7 @@ Reference: Xie et al., PRB 86, 045139 (2012).
 ## Configuration
 
 ```python
-from tnjax import HOTRGConfig
+from tenax import HOTRGConfig
 
 config = HOTRGConfig(
     max_bond_dim=16,               # maximum chi
@@ -37,7 +37,7 @@ config = HOTRGConfig(
 
 ```python
 import math
-from tnjax import HOTRGConfig, hotrg, compute_ising_tensor, ising_free_energy_exact
+from tenax import HOTRGConfig, hotrg, compute_ising_tensor, ising_free_energy_exact
 
 beta_c = math.log(1 + math.sqrt(2)) / 2
 tensor = compute_ising_tensor(beta_c)

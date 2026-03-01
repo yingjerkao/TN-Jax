@@ -1,11 +1,12 @@
-"""Timing infrastructure for TN-Jax benchmarks."""
+"""Timing infrastructure for Tenax benchmarks."""
 
 from __future__ import annotations
 
 import time
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import jax.numpy as jnp
 
@@ -106,7 +107,9 @@ def run_benchmark(
         result.min_time_s = min(times)
         if len(times) > 1:
             mean = result.mean_time_s
-            result.std_time_s = (sum((t - mean) ** 2 for t in times) / (len(times) - 1)) ** 0.5
+            result.std_time_s = (
+                sum((t - mean) ** 2 for t in times) / (len(times) - 1)
+            ) ** 0.5
 
     except Exception:
         result.error = traceback.format_exc()

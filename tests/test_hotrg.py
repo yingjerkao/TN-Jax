@@ -4,14 +4,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tnjax.algorithms.hotrg import (
+from tenax.algorithms.hotrg import (
     HOTRGConfig,
     _hotrg_step_horizontal,
     _hotrg_step_vertical,
     hotrg,
 )
-from tnjax.algorithms.trg import compute_ising_tensor, ising_free_energy_exact
-from tnjax.core.tensor import DenseTensor
+from tenax.algorithms.trg import compute_ising_tensor, ising_free_energy_exact
+from tenax.core.tensor import DenseTensor
 
 
 class TestHOTRGConfig:
@@ -199,7 +199,7 @@ class TestHOTRGRun:
 
     def test_hotrg_vs_trg_sign(self):
         """HOTRG and TRG log(Z)/N should have the same sign."""
-        from tnjax.algorithms.trg import TRGConfig, trg
+        from tenax.algorithms.trg import TRGConfig, trg
 
         beta = 0.3
         tensor = compute_ising_tensor(beta=beta)
@@ -213,7 +213,7 @@ class TestHOTRGRun:
 
     def test_hotrg_more_accurate_than_trg(self):
         """HOTRG should achieve better accuracy than TRG at the same chi."""
-        from tnjax.algorithms.trg import TRGConfig, trg
+        from tenax.algorithms.trg import TRGConfig, trg
 
         beta = 0.3
         tensor = compute_ising_tensor(beta=beta)

@@ -11,7 +11,7 @@ solves a local eigenvalue problem (Lanczos) for the effective Hamiltonian
 projected into the MPS subspace, then truncates via SVD to control the bond
 dimension.
 
-Key properties of the TN-Jax implementation:
+Key properties of the Tenax implementation:
 
 - **2-site and 1-site** variants (`DMRGConfig.two_site`).
 - Outer sweep loop is a Python for-loop (bond dimensions change dynamically).
@@ -22,7 +22,7 @@ Key properties of the TN-Jax implementation:
 ## Configuration
 
 ```python
-from tnjax import DMRGConfig
+from tenax import DMRGConfig
 
 config = DMRGConfig(
     max_bond_dim=64,       # maximum MPS bond dimension
@@ -39,7 +39,7 @@ config = DMRGConfig(
 ## Example -- Heisenberg chain
 
 ```python
-from tnjax import (
+from tenax import (
     DMRGConfig, dmrg,
     build_mpo_heisenberg, build_random_mps,
 )
@@ -83,7 +83,7 @@ For 2D systems, map the lattice to a 1D chain (column-major ordering) and
 use `AutoMPO` to build the long-range MPO:
 
 ```python
-from tnjax import AutoMPO, DMRGConfig, build_random_mps, dmrg
+from tenax import AutoMPO, DMRGConfig, build_random_mps, dmrg
 
 Lx, Ly, N = 8, 4, 32
 auto = AutoMPO(L=N, d=2)

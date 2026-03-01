@@ -438,7 +438,9 @@ class FermionicU1(BaseSymmetry):
         return (-1.0) ** self._grading(charge)
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, FermionicU1) and self._grading_key == other._grading_key
+        return (
+            isinstance(other, FermionicU1) and self._grading_key == other._grading_key
+        )
 
     def __hash__(self) -> int:
         return hash(("FermionicU1", self._grading_key))
@@ -542,8 +544,12 @@ class ProductSymmetry(BaseSymmetry):
     def exchange_sign(self, charge_a: int, charge_b: int) -> int:
         a1, a2 = self.decode(charge_a)
         b1, b2 = self.decode(charge_b)
-        pa = (self.sym1.parity(np.array([a1]))[0] + self.sym2.parity(np.array([a2]))[0]) % 2
-        pb = (self.sym1.parity(np.array([b1]))[0] + self.sym2.parity(np.array([b2]))[0]) % 2
+        pa = (
+            self.sym1.parity(np.array([a1]))[0] + self.sym2.parity(np.array([a2]))[0]
+        ) % 2
+        pb = (
+            self.sym1.parity(np.array([b1]))[0] + self.sym2.parity(np.array([b2]))[0]
+        ) % 2
         return 1 - 2 * (pa * pb)
 
     def exchange_phase(self, charge_a: int, charge_b: int) -> complex:
@@ -551,7 +557,9 @@ class ProductSymmetry(BaseSymmetry):
 
     def twist_phase(self, charge: int) -> complex:
         q1, q2 = self.decode(charge)
-        p = (self.sym1.parity(np.array([q1]))[0] + self.sym2.parity(np.array([q2]))[0]) % 2
+        p = (
+            self.sym1.parity(np.array([q1]))[0] + self.sym2.parity(np.array([q2]))[0]
+        ) % 2
         return (-1.0) ** p
 
     def __eq__(self, other: object) -> bool:

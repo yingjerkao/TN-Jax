@@ -1,6 +1,6 @@
 # Tensor Network GUI Design Notes
 
-A GUI to visually plot tensor networks and generate TN-Jax code, inspired by [TensorTrace](https://www.tensortrace.com/) and [GuiTeNet](https://github.com/GuiTeNet/guitenet).
+A GUI to visually plot tensor networks and generate Tenax code, inspired by [TensorTrace](https://www.tensortrace.com/) and [GuiTeNet](https://github.com/GuiTeNet/guitenet).
 
 ---
 
@@ -12,14 +12,18 @@ A GUI to visually plot tensor networks and generate TN-Jax code, inspired by [Te
 | [GuiTeNet](https://github.com/GuiTeNet/guitenet) | Web (JS) | Browser-based, visual graph editing | Research prototype, limited backends |
 | [Cytnx Network](https://github.com/Cytnx-dev/Cytnx) | Python CLI | `print_diagram()` ASCII art, `.net` file support | Not visual/interactive, no drag-and-drop |
 
-TN-Jax already has `NetworkBlueprint` / `.net` files and a `TensorNetwork` graph container -- that's a strong foundation for code generation. The missing piece is the **visual editor**.
+Tenax already has `NetworkBlueprint` / `.net` files and a `TensorNetwork` graph container -- that's a strong foundation for code generation. The missing piece is the **visual editor**.
 
 ---
 
 ## Decisions
 
 - **Platform**: Lightweight **web app** (no desktop, no Jupyter widget for MVP)
-- **Repo location**: `tools/tn-editor/` inside TN-Jax
+- **Repo**: Separate repository (e.g., `tn-editor`), not inside Tenax
+  - Different release cycles — GUI ships independently from the library
+  - Different CI — npm/Vite/Playwright vs pytest/ruff
+  - Different contributors — frontend devs don't need the full Tenax tree
+  - Tenax is a pip dependency of the backend, not a monorepo sibling
 
 ### Frontend: Svelte + Svelte Flow
 
@@ -36,15 +40,15 @@ TN-Jax already has `NetworkBlueprint` / `.net` files and a `TensorNetwork` graph
 
 ### Backend: FastAPI (Python)
 
-Thin **FastAPI** server wrapping TN-Jax directly:
+Thin **FastAPI** server wrapping Tenax directly:
 - `/api/optimize` -- find optimal contraction order + FLOP cost via `opt_einsum`
-- `/api/codegen` -- convert network JSON to TN-Jax Python code
+- `/api/codegen` -- convert network JSON to Tenax Python code
 - `/api/export` -- generate `.net` file or LaTeX/TikZ
 - `/api/validate` -- check charge conservation for symmetric networks
 
 Why FastAPI:
 - Async, minimal overhead
-- Direct access to TN-Jax (no serialization/pyodide hacks)
+- Direct access to Tenax (no serialization/pyodide hacks)
 - Auto-generated OpenAPI docs for free
 - Single `pip install` with `uvicorn`
 
@@ -59,7 +63,7 @@ Browser (Svelte)                    Server (FastAPI)
 | +--------+ +------+------+ |      | /api/export            |
 |            | Props Panel  | |<-----| /api/validate          |
 |            +------+------+ |      |                        |
-|                   |         |      |  TN-Jax (opt_einsum,  |
+|                   |         |      |  Tenax (opt_einsum,  |
 |  +--------+ +----------+   |      |   NetworkBlueprint)    |
 |  | Code   | | Cost     |   |      +------------------------+
 |  | Mirror | | Display  |   |
@@ -107,11 +111,11 @@ This maps 1:1 to the existing `NetworkBlueprint` / `.net` format and to `TensorN
 
 ### 5. Code Generation Targets
 
-The GUI should generate **idiomatic TN-Jax code**, not generic einsum. Three levels:
+The GUI should generate **idiomatic Tenax code**, not generic einsum. Three levels:
 
 **Level 1 -- Raw contraction:**
 ```python
-from tnjax import DenseTensor, TensorIndex, contract, FlowDirection
+from tenax import DenseTensor, TensorIndex, contract, FlowDirection
 
 idx_bond = TensorIndex(symmetry=U1Symmetry(), charges=..., flow=FlowDirection.OUT, label="bond")
 A = DenseTensor(data=jnp.zeros((2, 32)), indices=(idx_phys, idx_bond))
@@ -121,7 +125,7 @@ result = contract(A, B)
 
 **Level 2 -- Blueprint / .net file:**
 ```python
-from tnjax import NetworkBlueprint
+from tenax import NetworkBlueprint
 bp = NetworkBlueprint("""
 A: i, j, k
 B: k, l, m
@@ -131,7 +135,7 @@ TOUT: i, j, l, m
 
 **Level 3 -- Algorithm template:**
 ```python
-from tnjax import AutoMPO, build_random_mps, dmrg, DMRGConfig
+from tenax import AutoMPO, build_random_mps, dmrg, DMRGConfig
 
 auto = AutoMPO(L=10, d=2)
 auto += (1.0, "Sz", 0, "Sz", 1)
@@ -159,8 +163,8 @@ result = dmrg(mpo, mps, DMRGConfig(max_bond_dim=64))
 | UI framework | **Svelte 5** | Smallest bundle, reactive by default |
 | Graph editor | **Svelte Flow** | Node graph with handles, built for this |
 | Code display | **CodeMirror 6** | Python syntax highlighting |
-| Backend | **FastAPI + uvicorn** | Async, direct TN-Jax access, auto docs |
-| Contraction opt | **opt_einsum** (via TN-Jax) | Server-side path finding |
+| Backend | **FastAPI + uvicorn** | Async, direct Tenax access, auto docs |
+| Contraction opt | **opt_einsum** (via Tenax) | Server-side path finding |
 | Build/bundle | **Vite** | Fast HMR, small production builds |
 | Diagram export | **SVG -> LaTeX** | Native SVG from Svelte Flow |
 
@@ -169,7 +173,7 @@ result = dmrg(mpo, mps, DMRGConfig(max_bond_dim=64))
 ## Project Structure
 
 ```
-tools/tn-editor/
+tn-editor/          # standalone repo
   frontend/
     src/
       lib/
@@ -191,11 +195,11 @@ tools/tn-editor/
     svelte.config.js
   backend/
     app.py                       # FastAPI app
-    codegen.py                   # JSON -> TN-Jax Python code
+    codegen.py                   # JSON -> Tenax Python code
     optimizer.py                 # opt_einsum wrapper
     exporter.py                  # .net file + LaTeX export
     schemas.py                   # Pydantic models (match JSON schema)
-  pyproject.toml                 # backend deps (fastapi, uvicorn, tnjax)
+  pyproject.toml                 # backend deps (fastapi, uvicorn, tenax as pip dep)
   README.md
 ```
 

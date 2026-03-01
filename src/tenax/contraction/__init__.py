@@ -1,6 +1,6 @@
 """Tensor contraction engine with label-based API."""
 
-from tnjax.contraction.contractor import (
+from tenax.contraction.contractor import (
     contract,
     contract_with_subscripts,
     qr_decompose,

@@ -8,7 +8,7 @@ MPS and PEPS.
 ## Creating a network
 
 ```python
-from tnjax import TensorNetwork
+from tenax import TensorNetwork
 
 tn = TensorNetwork(name="my_network")
 
@@ -79,7 +79,7 @@ tn.clear_cache()
 auto-connects adjacent sites by their shared virtual bond labels.
 
 ```python
-from tnjax import build_mps
+from tenax import build_mps
 
 mps = build_mps(site_tensors)
 # Nodes are labelled 0, 1, ..., L-1
@@ -99,7 +99,7 @@ Label convention for MPS site tensors:
 `build_peps` creates a 2D tensor network from a grid of site tensors:
 
 ```python
-from tnjax import build_peps
+from tenax import build_peps
 
 peps = build_peps(tensor_grid, Lx=3, Ly=3)
 # Nodes are labelled (i, j)

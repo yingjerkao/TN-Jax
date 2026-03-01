@@ -8,15 +8,15 @@
 ## Install with pip
 
 ```bash
-pip install tnjax
+pip install tenax
 ```
 
 ## Install with uv (recommended for development)
 
 ```bash
 # Clone the repository
-git clone https://github.com/yingjerkao/TN-Jax.git
-cd TN-Jax
+git clone https://github.com/yingjerkao/Tenax.git
+cd Tenax
 
 # Install in development mode with all extras
 uv sync --all-extras --dev
@@ -24,34 +24,34 @@ uv sync --all-extras --dev
 
 ## Hardware acceleration
 
-TN-Jax uses JAX as its backend. Install with a hardware-specific extra to
+Tenax uses JAX as its backend. Install with a hardware-specific extra to
 enable GPU or TPU acceleration:
 
 ```bash
 # NVIDIA GPU (CUDA 13, recommended)
-pip install tnjax[cuda13]
+pip install tenax[cuda13]
 
 # NVIDIA GPU (CUDA 12)
-pip install tnjax[cuda12]
+pip install tenax[cuda12]
 
 # NVIDIA GPU with locally installed CUDA
-pip install tnjax[cuda12-local]
-pip install tnjax[cuda13-local]
+pip install tenax[cuda12-local]
+pip install tenax[cuda13-local]
 
 # Google Cloud TPU
-pip install tnjax[tpu]
+pip install tenax[tpu]
 
 # Apple Silicon GPU (macOS only, experimental)
-pip install tnjax[metal]
+pip install tenax[metal]
 ```
 
 For AMD ROCm GPUs, install JAX with ROCm support separately following
 [AMD's installation guide](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/3rd-party/jax-install.html),
-then install TN-Jax on top:
+then install Tenax on top:
 
 ```bash
 # After installing jax+jaxlib with ROCm
-pip install tnjax
+pip install tenax
 ```
 
 See the [JAX installation guide](https://docs.jax.dev/en/latest/installation.html) for the latest accelerator options.
@@ -67,19 +67,19 @@ The built site will be in `docs/_build/html/`.
 
 ## Float64 precision
 
-TN-Jax defaults to `float64` for all tensors and algorithms. Importing
-`tnjax` automatically enables JAX 64-bit mode via
+Tenax defaults to `float64` for all tensors and algorithms. Importing
+`tenax` automatically enables JAX 64-bit mode via
 `jax.config.update("jax_enable_x64", True)`.
 
-If you import JAX *before* `tnjax` and create arrays in that window, they
-will still be `float32`. To avoid surprises, either import `tnjax` first or
+If you import JAX *before* `tenax` and create arrays in that window, they
+will still be `float32`. To avoid surprises, either import `tenax` first or
 enable x64 manually:
 
 ```python
 import jax
 jax.config.update("jax_enable_x64", True)  # before any array creation
 
-import tnjax  # also calls the same update
+import tenax  # also calls the same update
 ```
 
 See {doc}`gotchas` for more details on float64 behaviour.
@@ -87,6 +87,6 @@ See {doc}`gotchas` for more details on float64 behaviour.
 ## Verifying the installation
 
 ```python
-import tnjax
-print(tnjax.__version__)
+import tenax
+print(tenax.__version__)
 ```

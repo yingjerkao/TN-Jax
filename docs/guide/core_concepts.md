@@ -1,13 +1,13 @@
 # Core Concepts
 
-TN-Jax is built on three layers: **symmetries**, **indices**, and **tensors**.
+Tenax is built on three layers: **symmetries**, **indices**, and **tensors**.
 Understanding these building blocks is essential for using the library
 effectively.
 
 ## Symmetries
 
 A symmetry object defines how quantum numbers (charges) combine and what
-constitutes a conserved quantity. TN-Jax ships two abelian symmetry types:
+constitutes a conserved quantity. Tenax ships two abelian symmetry types:
 
 ### U(1) Symmetry
 
@@ -15,7 +15,7 @@ constitutes a conserved quantity. TN-Jax ships two abelian symmetry types:
 arbitrary integers and fuse by addition.
 
 ```python
-from tnjax import U1Symmetry
+from tenax import U1Symmetry
 
 sym = U1Symmetry()
 
@@ -36,7 +36,7 @@ print(sym.identity())  # 0
 fuse by addition modulo n.
 
 ```python
-from tnjax import ZnSymmetry
+from tenax import ZnSymmetry
 
 z2 = ZnSymmetry(n=2)
 print(z2.fuse(1, 1))  # 0  (mod 2)
@@ -67,7 +67,7 @@ A `TensorIndex` attaches metadata to one leg of a tensor:
 
 ```python
 import numpy as np
-from tnjax import U1Symmetry, TensorIndex, FlowDirection
+from tenax import U1Symmetry, TensorIndex, FlowDirection
 
 sym = U1Symmetry()
 
@@ -96,7 +96,7 @@ print(bond.label)  # "bond"
 
 ## Tensors
 
-TN-Jax provides two concrete tensor types that share a common `Tensor`
+Tenax provides two concrete tensor types that share a common `Tensor`
 protocol.
 
 ### DenseTensor
@@ -105,7 +105,7 @@ A full JAX array with index metadata. Every element is stored.
 
 ```python
 import jax.numpy as jnp
-from tnjax import DenseTensor
+from tenax import DenseTensor
 
 data = jnp.ones((2, 3))
 tensor = DenseTensor(data, (phys, bond))
@@ -123,7 +123,7 @@ symmetry has many sectors.
 
 ```python
 import jax
-from tnjax import SymmetricTensor
+from tenax import SymmetricTensor
 
 bond_in = TensorIndex(sym, np.array([-1, 0, 1], dtype=np.int32),
                        FlowDirection.IN, label="left")

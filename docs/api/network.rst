@@ -1,7 +1,7 @@
 Tensor Network
 ==============
 
-.. automodule:: tnjax.network.network
+.. automodule:: tenax.network.network
    :members:
    :undoc-members:
    :show-inheritance:

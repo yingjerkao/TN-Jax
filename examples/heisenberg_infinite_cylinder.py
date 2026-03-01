@@ -21,8 +21,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 
-from tnjax import build_bulk_mpo_heisenberg_cylinder, iDMRGConfig, idmrg
-
+from tenax import build_bulk_mpo_heisenberg_cylinder, idmrg, iDMRGConfig
 
 # ---------------------------------------------------------------------------
 # Exact diagonalisation for a 2-ring cylinder (cross-check for Ly=2)
@@ -63,15 +62,17 @@ def ed_two_ring_cylinder(Ly: int, J: float = 1.0) -> float:
             seen_bonds.add(bond)
             i = ring * Ly + y
             j = ring * Ly + y_next
-            H += J * (embed(Sz, i) @ embed(Sz, j)
-                      + 0.5 * (embed(Sp, i) @ embed(Sm, j)
-                               + embed(Sm, i) @ embed(Sp, j)))
+            H += J * (
+                embed(Sz, i) @ embed(Sz, j)
+                + 0.5 * (embed(Sp, i) @ embed(Sm, j) + embed(Sm, i) @ embed(Sp, j))
+            )
     for y in range(Ly):
         i = y
         j = Ly + y
-        H += J * (embed(Sz, i) @ embed(Sz, j)
-                  + 0.5 * (embed(Sp, i) @ embed(Sm, j)
-                           + embed(Sm, i) @ embed(Sp, j)))
+        H += J * (
+            embed(Sz, i) @ embed(Sz, j)
+            + 0.5 * (embed(Sp, i) @ embed(Sm, j) + embed(Sm, i) @ embed(Sp, j))
+        )
 
     return float(np.linalg.eigvalsh(H)[0])
 
@@ -94,10 +95,10 @@ def run_cylinder_idmrg(
     D_w = 3 * Ly + 2
     n_bonds = 2 * Ly  # Ly within-ring + Ly between-ring per unit cell
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Infinite Heisenberg cylinder  Ly={Ly}")
     print(f"  d={d}, D_w={D_w}, chi={chi}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     W = build_bulk_mpo_heisenberg_cylinder(Ly)
     config = iDMRGConfig(

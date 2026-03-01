@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tnjax import TRGConfig, compute_ising_tensor, trg
+from tenax import TRGConfig, compute_ising_tensor, trg
 
 _BETA_C = 0.4407
 

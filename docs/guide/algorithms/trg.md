@@ -23,7 +23,7 @@ Reference: Levin & Nave, PRL 99, 120601 (2007).
 ## Configuration
 
 ```python
-from tnjax import TRGConfig
+from tenax import TRGConfig
 
 config = TRGConfig(
     max_bond_dim=16,      # maximum chi after each coarse-graining step
@@ -36,7 +36,7 @@ config = TRGConfig(
 
 ```python
 import math
-from tnjax import TRGConfig, trg, compute_ising_tensor, ising_free_energy_exact
+from tenax import TRGConfig, trg, compute_ising_tensor, ising_free_energy_exact
 
 # Critical temperature of the 2D Ising model
 beta_c = math.log(1 + math.sqrt(2)) / 2

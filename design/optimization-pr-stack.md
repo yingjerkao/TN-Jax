@@ -12,7 +12,7 @@ Benchmarks revealed 5 remaining optimization hotspots after previous performance
 
 **Problem:** `network.py:360` uses `frozenset(nodes)` in the cache key, but output label order depends on node iteration order when `output_labels=None`. Two calls with the same nodes in different order return the same cached result with wrong leg ordering.
 
-**File:** `src/tnjax/network/network.py`
+**File:** `src/tenax/network/network.py`
 
 **Change (line 360):**
 ```python
@@ -31,8 +31,8 @@ cache_key = (tuple(nodes), tuple(output_labels or ()), optimize)
 **Problem:** `dmrg.py:786` calls `truncated_svd`, then `dmrg.py:804` does a second full SVD just for truncation error. The first SVD already computes all singular values at `contractor.py:1039`.
 
 **Files:**
-- `src/tnjax/contraction/contractor.py` — `truncated_svd()` (line ~1039)
-- `src/tnjax/algorithms/dmrg.py` — `_svd_and_truncate_site()` (line ~786)
+- `src/tenax/contraction/contractor.py` — `truncated_svd()` (line ~1039)
+- `src/tenax/algorithms/dmrg.py` — `_svd_and_truncate_site()` (line ~786)
 
 **Changes:**
 1. In `truncated_svd`, save `s_full = s` before truncation (line 1039-1064). Return `(U_tensor, s_truncated, Vh_tensor, s_full)` — 4-tuple instead of 3.
@@ -46,7 +46,7 @@ cache_key = (tuple(nodes), tuple(output_labels or ()), optimize)
 
 **Problem:** `hotrg.py` step functions (`_hotrg_step_horizontal`, `_hotrg_step_vertical`, `_compute_hosvd_isometry`) lack `@jax.jit`, causing recompilation overhead. Benchmark: HOTRG 13.39s vs TRG 0.013s.
 
-**File:** `src/tnjax/algorithms/hotrg.py`
+**File:** `src/tenax/algorithms/hotrg.py`
 
 **Changes:**
 1. Mark `_hotrg_step_horizontal` and `_hotrg_step_vertical` with `@jax.jit` using `static_argnums=(1,)` for `max_bond_dim`.
@@ -61,7 +61,7 @@ cache_key = (tuple(nodes), tuple(output_labels or ()), optimize)
 
 **Problem:** `ipeps.py:924` runs CTM iterations in a Python loop with `float()` host sync at line 940 for convergence checking, preventing JIT compilation.
 
-**File:** `src/tnjax/algorithms/ipeps.py`
+**File:** `src/tenax/algorithms/ipeps.py`
 
 **Changes:**
 1. Extract the 4-move sweep body (left/right/top/bottom + optional renormalize) into a helper.
@@ -79,7 +79,7 @@ cache_key = (tuple(nodes), tuple(output_labels or ()), optimize)
 
 **Problem:** `ipeps_excitations.py:521` loops over `basis_size` (D^4*d) gradient evaluations serially, writing columns to NumPy arrays one at a time.
 
-**File:** `src/tnjax/algorithms/ipeps_excitations.py`
+**File:** `src/tenax/algorithms/ipeps_excitations.py`
 
 **Changes in `_build_H_and_N` (lines 503-532):**
 1. Stack basis tensors: `B_stacked = jnp.stack(basis)` — shape `(basis_size, D, D, D, D, d)`.

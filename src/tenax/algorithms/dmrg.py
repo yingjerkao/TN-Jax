@@ -31,11 +31,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tnjax.contraction.contractor import contract, qr_decompose, truncated_svd
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor, Tensor
-from tnjax.network.network import TensorNetwork
+from tenax.contraction.contractor import contract, qr_decompose, truncated_svd
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry
+from tenax.core.tensor import DenseTensor, Tensor
+from tenax.network.network import TensorNetwork
 
 
 @dataclass
@@ -112,9 +112,7 @@ def dmrg(
     # engine operates entirely in dense mode (all contractions go through
     # .todense()), so the block-sparse structure is not preserved across sweeps.
     mps_tensors: list[Tensor] = [
-        DenseTensor(t.todense(), t.indices)
-        if not isinstance(t, DenseTensor)
-        else t
+        DenseTensor(t.todense(), t.indices) if not isinstance(t, DenseTensor) else t
         for t in [initial_mps.get_tensor(i) for i in range(L)]
     ]
     mpo_tensors = [hamiltonian.get_tensor(i) for i in range(L)]
@@ -159,9 +157,7 @@ def dmrg(
                 energy = float(e)
 
                 # SVD and truncate
-                A, s, B, trunc_err = _svd_and_truncate_site(
-                    theta, i, config
-                )
+                A, s, B, trunc_err = _svd_and_truncate_site(theta, i, config)
                 mps_tensors[i] = A
                 mps_tensors[i + 1] = B
                 truncation_errors.append(float(trunc_err))
@@ -279,7 +275,9 @@ def _right_canonicalize(mps_tensors: list[Tensor]) -> list[Tensor]:
             tensor,
             left_labels=[left_bond],
             right_labels=other_labels,
-            new_bond_label=left_bond + "_new" if isinstance(left_bond, str) else f"b{i}",
+            new_bond_label=left_bond + "_new"
+            if isinstance(left_bond, str)
+            else f"b{i}",
         )
 
         # Absorb R into site i-1
@@ -307,7 +305,8 @@ def _find_right_bond(labels: tuple, site: int) -> str | None:
 
 def _trivial_env() -> DenseTensor:
     """Create a trivial (scalar 1) environment tensor."""
-    from tnjax.core.symmetry import U1Symmetry
+    from tenax.core.symmetry import U1Symmetry
+
     sym = U1Symmetry()
     idx = TensorIndex(sym, np.zeros(1, dtype=np.int32), FlowDirection.IN, label="env")
     return DenseTensor(jnp.ones((1,), dtype=jnp.float64), (idx,))
@@ -361,8 +360,8 @@ def _build_trivial_left_env(dtype=None) -> DenseTensor:
     sym = U1Symmetry()
     bond = np.zeros(1, dtype=np.int32)
     indices = (
-        TensorIndex(sym, bond, FlowDirection.IN,  label="env_mps_l"),
-        TensorIndex(sym, bond, FlowDirection.IN,  label="env_mpo_l"),
+        TensorIndex(sym, bond, FlowDirection.IN, label="env_mps_l"),
+        TensorIndex(sym, bond, FlowDirection.IN, label="env_mpo_l"),
         TensorIndex(sym, bond, FlowDirection.OUT, label="env_mps_conj_l"),
     )
     return DenseTensor(jnp.ones((1, 1, 1), dtype=dtype), indices)
@@ -377,7 +376,7 @@ def _build_trivial_right_env(dtype=None) -> DenseTensor:
     indices = (
         TensorIndex(sym, bond, FlowDirection.OUT, label="env_mps_r"),
         TensorIndex(sym, bond, FlowDirection.OUT, label="env_mpo_r"),
-        TensorIndex(sym, bond, FlowDirection.IN,  label="env_mps_conj_r"),
+        TensorIndex(sym, bond, FlowDirection.IN, label="env_mps_conj_r"),
     )
     return DenseTensor(jnp.ones((1, 1, 1), dtype=dtype), indices)
 
@@ -400,9 +399,9 @@ def _update_left_env(
         Updated left environment tensor.
     """
     # Dense implementation using todense() for generality
-    L_dense = left_env.todense()   # shape (chi_l, D_w, chi_l')
-    A_dense = mps_site.todense()   # shape (chi_l, d, chi_r) for middle sites
-    W_dense = mpo_site.todense()   # shape (D_w_l, d_top, d_bot, D_w_r)
+    L_dense = left_env.todense()  # shape (chi_l, D_w, chi_l')
+    A_dense = mps_site.todense()  # shape (chi_l, d, chi_r) for middle sites
+    W_dense = mpo_site.todense()  # shape (D_w_l, d_top, d_bot, D_w_r)
 
     # Pad A to always be 3D: if boundary site is 2D, add a trivial dim
     if A_dense.ndim == 2:
@@ -418,15 +417,18 @@ def _update_left_env(
     # -> new_L[d, e, f] = (chi_r, D_w_r, chi_r')
     new_L = jnp.einsum(
         "abc,apd,bpxe,cxf->def",
-        L_dense, A_dense, W_dense, jnp.conj(A_dense),
+        L_dense,
+        A_dense,
+        W_dense,
+        jnp.conj(A_dense),
     )
 
     sym = U1Symmetry()
     bond_r = np.zeros(new_L.shape[0], dtype=np.int32)
     bond_w = np.zeros(new_L.shape[1], dtype=np.int32)
     indices = (
-        TensorIndex(sym, bond_r, FlowDirection.IN,  label="env_mps_l"),
-        TensorIndex(sym, bond_w, FlowDirection.IN,  label="env_mpo_l"),
+        TensorIndex(sym, bond_r, FlowDirection.IN, label="env_mps_l"),
+        TensorIndex(sym, bond_w, FlowDirection.IN, label="env_mpo_l"),
         TensorIndex(sym, bond_r, FlowDirection.OUT, label="env_mps_conj_l"),
     )
     return DenseTensor(new_L, indices)
@@ -438,9 +440,9 @@ def _update_right_env(
     mpo_site: Tensor,
 ) -> DenseTensor:
     """Update right environment by absorbing one MPS/MPO site."""
-    R_dense = right_env.todense()   # shape (chi_r, D_w, chi_r')
-    B_dense = mps_site.todense()    # shape (chi_l, d, chi_r) for middle sites
-    W_dense = mpo_site.todense()    # shape (D_w_l, d_top, d_bot, D_w_r)
+    R_dense = right_env.todense()  # shape (chi_r, D_w, chi_r')
+    B_dense = mps_site.todense()  # shape (chi_l, d, chi_r) for middle sites
+    W_dense = mpo_site.todense()  # shape (D_w_l, d_top, d_bot, D_w_r)
 
     # Pad B to 3D if boundary
     if B_dense.ndim == 2:
@@ -456,7 +458,10 @@ def _update_right_env(
     # -> new_R[d, e, f] = (chi_l, D_w_l, chi_l')
     new_R = jnp.einsum(
         "abc,dpa,epxb,fxc->def",
-        R_dense, B_dense, W_dense, jnp.conj(B_dense),
+        R_dense,
+        B_dense,
+        W_dense,
+        jnp.conj(B_dense),
     )
 
     sym = U1Symmetry()
@@ -465,7 +470,7 @@ def _update_right_env(
     indices = (
         TensorIndex(sym, bond_l, FlowDirection.OUT, label="env_mps_r"),
         TensorIndex(sym, bond_w, FlowDirection.OUT, label="env_mpo_r"),
-        TensorIndex(sym, bond_l, FlowDirection.IN,  label="env_mps_conj_r"),
+        TensorIndex(sym, bond_l, FlowDirection.IN, label="env_mps_conj_r"),
     )
     return DenseTensor(new_R, indices)
 
@@ -514,7 +519,11 @@ def _effective_hamiltonian_matvec(
     #   g = chi_r (MPS bond right, bra)
     result = jnp.einsum(
         "abc,apqd,bpse,eqtf,dfg->cstg",
-        L_env, theta, W_l, W_r, R_env,
+        L_env,
+        theta,
+        W_l,
+        W_r,
+        R_env,
     )
     return result.ravel()
 
@@ -771,8 +780,12 @@ def _svd_and_truncate_site(
     right_phys = f"p{site + 1}"
 
     # Build actual left/right label splits based on what's available
-    left_labels = [lbl for lbl in labels if lbl in (left_virt, left_phys) and lbl is not None]
-    right_labels = [lbl for lbl in labels if lbl in (right_virt, right_phys) and lbl is not None]
+    left_labels = [
+        lbl for lbl in labels if lbl in (left_virt, left_phys) and lbl is not None
+    ]
+    right_labels = [
+        lbl for lbl in labels if lbl in (right_virt, right_phys) and lbl is not None
+    ]
 
     if not left_labels or not right_labels:
         # Fallback: split roughly in half
@@ -822,6 +835,7 @@ def _svd_and_truncate_site(
 # MPO builders                                                        #
 # ------------------------------------------------------------------ #
 
+
 def build_mpo_heisenberg(
     L: int,
     Jz: float = 1.0,
@@ -852,8 +866,8 @@ def build_mpo_heisenberg(
     """
     # Spin-1/2 operators (physical dimension d=2)
     d = 2
-    Sp = jnp.array([[0, 1], [0, 0]], dtype=dtype)   # S+ = |up><down|
-    Sm = jnp.array([[0, 0], [1, 0]], dtype=dtype)   # S- = |down><up|
+    Sp = jnp.array([[0, 1], [0, 0]], dtype=dtype)  # S+ = |up><down|
+    Sm = jnp.array([[0, 0], [1, 0]], dtype=dtype)  # S- = |down><up|
     Sz = 0.5 * jnp.array([[1, 0], [0, -1]], dtype=dtype)
     I2 = jnp.eye(d, dtype=dtype)
 
@@ -928,9 +942,9 @@ def build_mpo_heisenberg(
             right_label = f"w{i}_{i + 1}"
 
         indices = (
-            TensorIndex(sym, left_bond,  FlowDirection.IN,  label=left_label),
-            TensorIndex(sym, bond_d,     FlowDirection.IN,  label=f"mpo_top_{i}"),
-            TensorIndex(sym, bond_d,     FlowDirection.OUT, label=f"mpo_bot_{i}"),
+            TensorIndex(sym, left_bond, FlowDirection.IN, label=left_label),
+            TensorIndex(sym, bond_d, FlowDirection.IN, label=f"mpo_top_{i}"),
+            TensorIndex(sym, bond_d, FlowDirection.OUT, label=f"mpo_bot_{i}"),
             TensorIndex(sym, right_bond, FlowDirection.OUT, label=right_label),
         )
         mpo.add_node(i, DenseTensor(W, indices))
@@ -972,7 +986,7 @@ def build_random_symmetric_mps(
     Returns:
         TensorNetwork representing the symmetric random MPS.
     """
-    from tnjax.core.tensor import SymmetricTensor
+    from tenax.core.tensor import SymmetricTensor
 
     sym = U1Symmetry()
 
@@ -983,11 +997,13 @@ def build_random_symmetric_mps(
     # Ensures at least one state per sector so blocks are non-trivial.
     q_each = max(1, bond_dim // 4)
     q_zero = max(1, bond_dim - 2 * q_each)
-    virt_charges = np.concatenate([
-        np.full(q_each, -1, dtype=np.int32),
-        np.full(q_zero, 0, dtype=np.int32),
-        np.full(q_each, 1, dtype=np.int32),
-    ])[:bond_dim]  # Trim to exact bond_dim
+    virt_charges = np.concatenate(
+        [
+            np.full(q_each, -1, dtype=np.int32),
+            np.full(q_zero, 0, dtype=np.int32),
+            np.full(q_each, 1, dtype=np.int32),
+        ]
+    )[:bond_dim]  # Trim to exact bond_dim
 
     mps = TensorNetwork(name=f"symmetric_MPS_L{L}")
 
@@ -997,8 +1013,10 @@ def build_random_symmetric_mps(
         if i == 0:
             # Left boundary: (phys_IN, virt_right_OUT)
             indices: tuple[TensorIndex, ...] = (
-                TensorIndex(sym, phys_charges, FlowDirection.IN,  label=f"p{i}"),
-                TensorIndex(sym, virt_charges, FlowDirection.OUT, label=f"v{i}_{i + 1}"),
+                TensorIndex(sym, phys_charges, FlowDirection.IN, label=f"p{i}"),
+                TensorIndex(
+                    sym, virt_charges, FlowDirection.OUT, label=f"v{i}_{i + 1}"
+                ),
             )
         elif i == L - 1:
             # Right boundary: (virt_left_IN, phys_IN)
@@ -1009,9 +1027,11 @@ def build_random_symmetric_mps(
         else:
             # Middle: (virt_left_IN, phys_IN, virt_right_OUT)
             indices = (
-                TensorIndex(sym, virt_charges, FlowDirection.IN,  label=f"v{i - 1}_{i}"),
-                TensorIndex(sym, phys_charges, FlowDirection.IN,  label=f"p{i}"),
-                TensorIndex(sym, virt_charges, FlowDirection.OUT, label=f"v{i}_{i + 1}"),
+                TensorIndex(sym, virt_charges, FlowDirection.IN, label=f"v{i - 1}_{i}"),
+                TensorIndex(sym, phys_charges, FlowDirection.IN, label=f"p{i}"),
+                TensorIndex(
+                    sym, virt_charges, FlowDirection.OUT, label=f"v{i}_{i + 1}"
+                ),
             )
 
         tensor = SymmetricTensor.random_normal(indices, key=key, dtype=dtype)
@@ -1058,20 +1078,20 @@ def build_random_mps(
         if i == 0:
             shape = (physical_dim, bond_dim)
             indices = (
-                TensorIndex(sym, bond_d,   FlowDirection.IN,  label=f"p{i}"),
+                TensorIndex(sym, bond_d, FlowDirection.IN, label=f"p{i}"),
                 TensorIndex(sym, bond_chi, FlowDirection.OUT, label=f"v{i}_{i + 1}"),
             )
         elif i == L - 1:
             shape = (bond_dim, physical_dim)
             indices = (
-                TensorIndex(sym, bond_chi, FlowDirection.IN,  label=f"v{i - 1}_{i}"),
-                TensorIndex(sym, bond_d,   FlowDirection.IN,  label=f"p{i}"),
+                TensorIndex(sym, bond_chi, FlowDirection.IN, label=f"v{i - 1}_{i}"),
+                TensorIndex(sym, bond_d, FlowDirection.IN, label=f"p{i}"),
             )
         else:
             shape = (bond_dim, physical_dim, bond_dim)
             indices = (
-                TensorIndex(sym, bond_chi, FlowDirection.IN,  label=f"v{i - 1}_{i}"),
-                TensorIndex(sym, bond_d,   FlowDirection.IN,  label=f"p{i}"),
+                TensorIndex(sym, bond_chi, FlowDirection.IN, label=f"v{i - 1}_{i}"),
+                TensorIndex(sym, bond_d, FlowDirection.IN, label=f"p{i}"),
                 TensorIndex(sym, bond_chi, FlowDirection.OUT, label=f"v{i}_{i + 1}"),
             )
 

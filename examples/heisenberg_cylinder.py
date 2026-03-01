@@ -33,7 +33,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tnjax import AutoMPO, DMRGConfig, build_random_mps, dmrg
+from tenax import AutoMPO, DMRGConfig, build_random_mps, dmrg
 
 # ---------------------------------------------------------------------------
 # Lattice helpers
@@ -170,18 +170,20 @@ def run_cylinder_dmrg(
         ed_check: If True, compare against exact diagonalisation.
     """
     N = Lx * Ly
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Heisenberg cylinder  Lx={Lx}, Ly={Ly}  (N={N} sites)")
     print(f"  max_bond_dim={max_bond_dim}, sweeps={num_sweeps}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Build MPO
     t0 = time.perf_counter()
     mpo, bond_dims_uncomp = build_heisenberg_cylinder_mpo(Lx, Ly, J=J)
     t_mpo = time.perf_counter() - t0
     print(f"  MPO built in {t_mpo:.2f}s")
-    print(f"  Uncompressed MPO bond dims: max={max(bond_dims_uncomp)}, "
-          f"all={bond_dims_uncomp}")
+    print(
+        f"  Uncompressed MPO bond dims: max={max(bond_dims_uncomp)}, "
+        f"all={bond_dims_uncomp}"
+    )
 
     # Build initial MPS
     mps = build_random_mps(N, physical_dim=2, bond_dim=initial_bond_dim, seed=42)
@@ -207,8 +209,9 @@ def run_cylinder_dmrg(
     print(f"  Converged: {result.converged}")
 
     if result.energies_per_sweep:
-        print(f"  Energies per sweep: "
-              f"{[f'{e:.6f}' for e in result.energies_per_sweep]}")
+        print(
+            f"  Energies per sweep: {[f'{e:.6f}' for e in result.energies_per_sweep]}"
+        )
 
     # ED cross-check
     if ed_check:
@@ -235,7 +238,8 @@ def main():
 
     # --- Configuration 1: 4x2 cylinder (8 sites) with ED check ---
     run_cylinder_dmrg(
-        Lx=4, Ly=2,
+        Lx=4,
+        Ly=2,
         max_bond_dim=32,
         num_sweeps=10,
         initial_bond_dim=8,
@@ -244,7 +248,8 @@ def main():
 
     # --- Configuration 2: 6x3 cylinder (18 sites) ---
     run_cylinder_dmrg(
-        Lx=6, Ly=3,
+        Lx=6,
+        Ly=3,
         max_bond_dim=100,
         num_sweeps=10,
         initial_bond_dim=16,
@@ -253,7 +258,8 @@ def main():
 
     # --- Configuration 3: 8x4 cylinder (32 sites) ---
     run_cylinder_dmrg(
-        Lx=8, Ly=4,
+        Lx=8,
+        Ly=4,
         max_bond_dim=200,
         num_sweeps=15,
         initial_bond_dim=16,
