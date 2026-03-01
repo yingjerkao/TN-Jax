@@ -112,6 +112,41 @@ class TestOptimizeGsAd:
         # Loose check — with small D and few steps, energy may not be very negative
         assert E_gs < 1.0, f"Energy should be negative-ish, got {E_gs}"
 
+    def test_su_init_runs_without_error(self, heisenberg_gate):
+        """optimize_gs_ad with su_init=True should produce a valid tensor."""
+        config = iPEPSConfig(
+            max_bond_dim=2,
+            num_imaginary_steps=10,
+            dt=0.1,
+            ctm=CTMConfig(chi=4, max_iter=10),
+            gs_num_steps=3,
+            gs_learning_rate=1e-2,
+            su_init=True,
+        )
+        A_opt, env, E_gs = optimize_gs_ad(heisenberg_gate, None, config)
+        assert A_opt.shape == (2, 2, 2, 2, 2)
+        assert jnp.all(jnp.isfinite(A_opt))
+        assert np.isfinite(E_gs)
+
+    def test_su_init_ignored_when_A_init_provided(self, heisenberg_gate):
+        """When A_init is provided, su_init=True should be ignored."""
+        key = jax.random.PRNGKey(42)
+        D, d = 2, 2
+        A_init = jax.random.normal(key, (D, D, D, D, d))
+        A_init = A_init / (jnp.linalg.norm(A_init) + 1e-10)
+
+        config = iPEPSConfig(
+            max_bond_dim=2,
+            ctm=CTMConfig(chi=4, max_iter=10),
+            gs_num_steps=3,
+            gs_learning_rate=1e-2,
+            su_init=True,
+        )
+        A_opt, env, E_gs = optimize_gs_ad(heisenberg_gate, A_init, config)
+        assert A_opt.shape == (D, D, D, D, d)
+        assert jnp.all(jnp.isfinite(A_opt))
+        assert np.isfinite(E_gs)
+
 
 # ---------------------------------------------------------------------------
 # Mixed double-layer tests

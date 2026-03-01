@@ -185,5 +185,27 @@ config = iPEPSConfig(
 A_opt, env, E_gs = optimize_gs_ad(H_bond, A_init=None, config=config)
 ```
 
+#### Simple update initialization
+
+Starting AD optimization from a random tensor can cause large gradients
+and slow convergence.  Setting ``su_init=True`` runs simple update first
+(using the ``num_imaginary_steps`` and ``dt`` already in the config) to
+produce a physically reasonable starting point:
+
+```python
+config = iPEPSConfig(
+    max_bond_dim=2,
+    num_imaginary_steps=200,
+    dt=0.01,
+    ctm=CTMConfig(chi=20, max_iter=100),
+    gs_num_steps=200,
+    gs_learning_rate=1e-3,
+    su_init=True,
+)
+A_opt, env, E_gs = optimize_gs_ad(H_bond, A_init=None, config=config)
+```
+
+When ``A_init`` is provided explicitly, ``su_init`` is ignored.
+
 For AD-based excitation spectra on top of an optimised iPEPS, see
 {doc}`ad_excitations`.
