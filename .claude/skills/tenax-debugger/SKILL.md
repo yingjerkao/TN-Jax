@@ -1,5 +1,5 @@
 ---
-name: tn-jax-debugger
+name: tenax-debugger
 description: >
   Diagnose and fix errors in Tenax tensor network code running on JAX.
   Covers four categories: (1) shape mismatches and tensor dimension errors,

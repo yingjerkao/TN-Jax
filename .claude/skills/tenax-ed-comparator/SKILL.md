@@ -1,5 +1,5 @@
 ---
-name: tn-jax-ed-comparator
+name: tenax-ed-comparator
 description: >
   Run exact diagonalization (ED) and DMRG side-by-side on small quantum systems
   to teach students why DMRG works and where it breaks down. Compares ground

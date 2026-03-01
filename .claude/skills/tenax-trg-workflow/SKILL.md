@@ -1,5 +1,5 @@
 ---
-name: tn-jax-trg-workflow
+name: tenax-trg-workflow
 description: >
   Guide graduate students through Tensor Renormalization Group (TRG) and HOTRG
   calculations for 2D classical statistical mechanics models using Tenax.

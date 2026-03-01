@@ -1,5 +1,5 @@
 ---
-name: tn-jax-benchmark
+name: tenax-benchmark
 description: >
   Help users design and run performance benchmarks for Tenax algorithms across
   hardware backends (CPU, CUDA, TPU, Metal). Generates the correct CLI commands

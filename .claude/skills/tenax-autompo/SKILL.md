@@ -1,5 +1,5 @@
 ---
-name: tn-jax-autompo
+name: tenax-autompo
 description: >
   Build Hamiltonian MPOs from natural-language model descriptions using Tenax's
   AutoMPO. Translates physics ("Heisenberg ladder with NNN coupling and staggered

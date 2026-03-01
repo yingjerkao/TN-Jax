@@ -1,5 +1,5 @@
 ---
-name: tn-jax-symmetry
+name: tenax-symmetry
 description: >
   Teach graduate students Tenax's symmetry system from the ground up: U(1) and
   Z_n symmetries, TensorIndex with charges and FlowDirection, SymmetricTensor
