@@ -1,5 +1,5 @@
 ---
-name: tn-jax-blueprint
+name: tenax-blueprint
 description: >
   Teach users to design tensor network contractions using Tenax's
   NetworkBlueprint and TensorNetwork classes. Translates tensor network diagrams

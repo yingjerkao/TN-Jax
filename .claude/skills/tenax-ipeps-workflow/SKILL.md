@@ -1,5 +1,5 @@
 ---
-name: tn-jax-ipeps-workflow
+name: tenax-ipeps-workflow
 description: >
   Guide graduate students through iPEPS calculations for 2D quantum lattice
   models using Tenax. Covers the full pipeline: simple update (imaginary time

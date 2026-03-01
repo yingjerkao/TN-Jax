@@ -1,5 +1,5 @@
 ---
-name: tn-jax-homework
+name: tenax-homework
 description: >
   Generate Tenax homework problems for a graduate solid state physics course.
   Creates scaffolded assignments with starter code, hints, and solutions, tied
