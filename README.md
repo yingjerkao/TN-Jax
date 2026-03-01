@@ -42,7 +42,7 @@ For development:
 
 ```bash
 git clone https://github.com/tenax-lab/tenax.git
-cd Tenax
+cd tenax
 uv sync --all-extras --dev
 ```
 
@@ -197,16 +197,21 @@ with ED cross-checks.
 ## TRG Example
 
 ```python
-from tenax.algorithms.trg import trg, compute_ising_tensor, TRGConfig
-import jax.numpy as jnp
+from tenax import TRGConfig, trg, compute_ising_tensor, ising_free_energy_exact
 
 beta = 0.44  # near critical temperature
 T = compute_ising_tensor(beta)
 
 config = TRGConfig(max_bond_dim=16, num_steps=20)
-free_energy = trg(T, config)
-print(f"Free energy per site: {free_energy:.8f}")
+log_z_per_n = trg(T, config)
+f_trg = float(-log_z_per_n / beta)
+f_exact = ising_free_energy_exact(beta)
+print(f"TRG:   {f_trg:.8f}")
+print(f"Exact: {f_exact:.8f}")
 ```
+
+See `examples/ising_trg.py` and `examples/ising_hotrg.py` for full TRG and HOTRG
+examples at multiple temperatures compared against the Onsager exact solution.
 
 ## AutoMPO Example
 
@@ -263,6 +268,8 @@ energy, peps, (env_A, env_B) = ipeps(gate, None, config)
 print(f"Energy per site: {energy:.6f}")  # ~ -0.65
 ```
 
+See `examples/heisenberg_ipeps_su.py` for 1-site and 2-site unit cell examples.
+
 ## iPEPS AD Optimization and Excitations
 
 ```python
@@ -281,20 +288,46 @@ gate = jnp.einsum("ij,kl->ikjl", Sz, Sz) \
              + jnp.einsum("ij,kl->ikjl", Sm, Sp))
 
 # AD ground-state optimization (Francuz et al. PRR 7, 013237)
+# su_init=True runs simple update first for a better starting tensor
 config = iPEPSConfig(
     max_bond_dim=2,
     ctm=CTMConfig(chi=16, max_iter=50),
     gs_num_steps=200,
     gs_learning_rate=1e-3,
+    su_init=True,
 )
 A_opt, env, E_gs = optimize_gs_ad(gate, None, config)
 print(f"Ground-state energy: {E_gs:.6f}")
 
 # Quasiparticle excitations (Ponsioen et al. 2022)
 momenta = make_momentum_path("brillouin", num_points=20)
-exc_config = ExcitationConfig(num_excitations=3, chi=16)
+exc_config = ExcitationConfig(num_excitations=3)
 result = compute_excitations(A_opt, env, gate, E_gs, momenta, exc_config)
 print(result.energies.shape)  # (20, 3)
+```
+
+See `examples/heisenberg_ipeps_ad.py` for AD optimization with random vs simple
+update initialization, and `examples/heisenberg_ipeps_excitations.py` for the
+full excitation spectrum along Gamma-X-M-Gamma.
+
+## Examples
+
+Runnable example scripts are in the `examples/` directory:
+
+| Script | Algorithm | Model |
+|--------|-----------|-------|
+| `heisenberg_cylinder.py` | DMRG | Heisenberg on 4x2, 6x3, 8x4 cylinders |
+| `heisenberg_infinite_cylinder.py` | iDMRG | Heisenberg on infinite Ly=2, Ly=4 cylinders |
+| `heisenberg_ipeps_su.py` | iPEPS simple update | Heisenberg (1x1 and 2-site unit cells) |
+| `heisenberg_ipeps_ad.py` | iPEPS AD optimization | Heisenberg (random vs SU init) |
+| `heisenberg_ipeps_excitations.py` | iPEPS excitations | Heisenberg dispersion along Γ-X-M-Γ |
+| `ising_trg.py` | TRG | 2D Ising vs Onsager exact |
+| `ising_hotrg.py` | HOTRG | 2D Ising vs Onsager exact |
+
+Run any example with:
+
+```bash
+uv run python examples/<script>.py
 ```
 
 ## Symmetry System
@@ -382,8 +415,8 @@ device info) to JSON. See `docs/guide/benchmarks.md` for the complete guide.
 
 ```bash
 # Clone and install with dev dependencies
-git clone https://github.com/tenax-lab/tenax
-cd Tenax
+git clone https://github.com/tenax-lab/tenax.git
+cd tenax
 uv sync --all-extras --dev
 
 # Install pre-commit hooks (ruff lint + format on every commit)
