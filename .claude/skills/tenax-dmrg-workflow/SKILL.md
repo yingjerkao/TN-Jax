@@ -1,5 +1,5 @@
 ---
-name: tn-jax-dmrg-workflow
+name: tenax-dmrg-workflow
 description: >
   Guide graduate students through a complete DMRG ground-state calculation using
   Tenax, from defining the Hamiltonian through AutoMPO to analyzing results.
