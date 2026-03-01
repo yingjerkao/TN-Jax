@@ -32,7 +32,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tnjax import (
+from tenax import (
     CTMConfig,
     ExcitationConfig,
     ExcitationResult,

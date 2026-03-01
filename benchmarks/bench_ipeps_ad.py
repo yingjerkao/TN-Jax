@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tnjax import CTMConfig, iPEPSConfig, optimize_gs_ad
+from tenax import CTMConfig, iPEPSConfig, optimize_gs_ad
 
 _SIZES = {
     "small": {"D": 2, "chi_ctm": 8, "gs_steps": 20, "lr": 1e-3},
@@ -18,10 +18,7 @@ def _heisenberg_gate(dtype=jnp.float64) -> jnp.ndarray:
     Sz = jnp.array([[0.5, 0.0], [0.0, -0.5]], dtype=dtype)
     Sp = jnp.array([[0.0, 1.0], [0.0, 0.0]], dtype=dtype)
     Sm = jnp.array([[0.0, 0.0], [1.0, 0.0]], dtype=dtype)
-    H = (
-        jnp.kron(Sz, Sz)
-        + 0.5 * (jnp.kron(Sp, Sm) + jnp.kron(Sm, Sp))
-    )
+    H = jnp.kron(Sz, Sz) + 0.5 * (jnp.kron(Sp, Sm) + jnp.kron(Sm, Sp))
     return H.reshape(2, 2, 2, 2)
 
 

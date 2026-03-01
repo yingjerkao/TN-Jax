@@ -21,7 +21,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tnjax.algorithms.ipeps import CTMEnvironment
+from tenax.algorithms.ipeps import CTMEnvironment
 
 # ---------------------------------------------------------------------------
 # Configuration and result dataclasses
@@ -100,7 +100,7 @@ def _build_mixed_double_layer(
         ao = jnp.einsum("udlrs,UDLRs->uUdDlLrR", A, jnp.conj(B))
     else:
         raise ValueError(f"position must be 'ket' or 'bra', got {position!r}")
-    return ao.reshape(D ** 2, D ** 2, D ** 2, D ** 2)
+    return ao.reshape(D**2, D**2, D**2, D**2)
 
 
 def _build_mixed_double_layer_open(
@@ -127,7 +127,7 @@ def _build_mixed_double_layer_open(
         ao = jnp.einsum("udlrs,UDLRt->uUdDlLrRst", A, jnp.conj(B))
     else:
         raise ValueError(f"position must be 'ket' or 'bra', got {position!r}")
-    return ao.reshape(D ** 2, D ** 2, D ** 2, D ** 2, d, d)
+    return ao.reshape(D**2, D**2, D**2, D**2, d, d)
 
 
 def _build_double_layer_BB_open(
@@ -140,7 +140,7 @@ def _build_double_layer_BB_open(
     D = B.shape[0]
     d = B.shape[4]
     ao = jnp.einsum("udlrs,UDLRt->uUdDlLrRst", B, jnp.conj(B))
-    return ao.reshape(D ** 2, D ** 2, D ** 2, D ** 2, d, d)
+    return ao.reshape(D**2, D**2, D**2, D**2, d, d)
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ def _make_open_tensor(
     Returns:
         Open double-layer tensor ``(D^2, D^2, D^2, D^2, d, d)``.
     """
-    from tnjax.algorithms.ipeps import _build_double_layer_open
+    from tenax.algorithms.ipeps import _build_double_layer_open
 
     ket_type, bra_type = sub
     if ket_type == "A" and bra_type == "A":
@@ -331,7 +331,7 @@ def _compute_norm(
     The norm is bilinear in B and B*, so ``jax.grad`` of this w.r.t. B
     at ``B = e_m`` gives the m-th column of the norm matrix N.
     """
-    from tnjax.algorithms.ipeps import _build_double_layer_open
+    from tenax.algorithms.ipeps import _build_double_layer_open
 
     # On-site term: B in ket, B* in bra at same site, A elsewhere
     ao_BB = _build_double_layer_BB_open(B)
@@ -396,7 +396,7 @@ def _compute_excitation_energy(
     Contracts 2-site RDMs with B substituted in various positions,
     weighted by momentum phases.
     """
-    from tnjax.algorithms.ipeps import _build_double_layer_open
+    from tenax.algorithms.ipeps import _build_double_layer_open
 
     H = hamiltonian_gate.reshape(d, d, d, d)
     # Shift Hamiltonian: subtract E_gs/2 per bond (2 bonds per site)
@@ -458,7 +458,7 @@ def _make_basis(D: int, d: int) -> list[jax.Array]:
     Returns a list of ``D^4 * d`` basis tensors, each of shape
     ``(D, D, D, D, d)``.
     """
-    basis_size = D ** 4 * d
+    basis_size = D**4 * d
     basis = []
     for i in range(basis_size):
         b = jnp.zeros(basis_size).at[i].set(1.0)
@@ -501,7 +501,7 @@ def _build_H_and_N(
         ``(H_eff, N_mat)`` each of shape ``(basis_size, basis_size)``.
     """
     D = A.shape[0]
-    basis_size = D ** 4 * d
+    basis_size = D**4 * d
     basis = _make_basis(D, d)
 
     # Stack basis tensors into a single JAX array: (basis_size, D, D, D, D, d)
@@ -520,7 +520,7 @@ def _build_H_and_N(
     # basis vector.  Transposing gives the matrix whose m-th column is
     # the gradient for the m-th basis vector (matching the original API).
     H_grads = jax.vmap(jax.grad(energy_fn))(B_stacked)  # (basis_size, D, D, D, D, d)
-    N_grads = jax.vmap(jax.grad(norm_fn))(B_stacked)     # (basis_size, D, D, D, D, d)
+    N_grads = jax.vmap(jax.grad(norm_fn))(B_stacked)  # (basis_size, D, D, D, D, d)
 
     # Reshape to (basis_size, basis_size) and transpose so that column m
     # corresponds to the gradient for basis vector m, then transfer to host.
@@ -701,10 +701,19 @@ def compute_excitations(
     for kx, ky in momenta:
         k = jnp.array([kx, ky])
         H_eff, N_mat = _build_H_and_N(
-            A, env, k, hamiltonian_gate, E_gs, d, config,
+            A,
+            env,
+            k,
+            hamiltonian_gate,
+            E_gs,
+            d,
+            config,
         )
         excitation_energies = _solve_excitations(
-            H_eff, N_mat, config.num_excitations, config.null_space_tol,
+            H_eff,
+            N_mat,
+            config.num_excitations,
+            config.null_space_tol,
         )
         all_energies.append(excitation_energies)
 

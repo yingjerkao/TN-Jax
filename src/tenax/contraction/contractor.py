@@ -33,8 +33,8 @@ import jax.numpy as jnp
 import numpy as np
 import opt_einsum
 
-from tnjax.core.index import FlowDirection, Label, TensorIndex
-from tnjax.core.tensor import (
+from tenax.core.index import FlowDirection, Label, TensorIndex
+from tenax.core.tensor import (
     BlockKey,
     DenseTensor,
     SymmetricTensor,
@@ -44,6 +44,7 @@ from tnjax.core.tensor import (
 )
 
 # ---------- Label → Subscript Translation ----------
+
 
 def _labels_to_subscripts(
     tensors: Sequence[Tensor],
@@ -146,6 +147,7 @@ def _labels_to_subscripts(
 
 # ---------- Dense contraction path cache ----------
 
+
 @functools.lru_cache(maxsize=256)
 def _cached_contraction_path(
     subscripts: str,
@@ -166,6 +168,7 @@ def _cached_contraction_path(
 
 
 # ---------- Dense contraction ----------
+
 
 def _contract_dense(
     tensors: Sequence[DenseTensor],
@@ -193,14 +196,13 @@ def _contract_dense(
     path = _cached_contraction_path(subscripts, shapes, optimize)
 
     # Execute contraction with cached path and JAX backend (GPU-compatible)
-    result = opt_einsum.contract(
-        subscripts, *arrays, optimize=path, backend="jax"
-    )
+    result = opt_einsum.contract(subscripts, *arrays, optimize=path, backend="jax")
 
     return DenseTensor(result, output_indices)
 
 
 # ---------- Fermionic sign helpers ----------
+
 
 def _contraction_inversion_pairs(
     input_subs: list[str],
@@ -285,6 +287,7 @@ def _contraction_inversion_pairs(
 
 
 # ---------- Symmetric (block-sparse) contraction ----------
+
 
 def _contract_symmetric(
     tensors: Sequence[SymmetricTensor],
@@ -425,7 +428,9 @@ def _contract_symmetric(
             else:
                 try:
                     expr = opt_einsum.contract_expression(
-                        subscripts, *block_shapes, optimize=optimize,
+                        subscripts,
+                        *block_shapes,
+                        optimize=optimize,
                     )
                     block_expr_cache[cache_key] = expr
                     result_array = expr(*arrays, backend="jax")
@@ -453,6 +458,7 @@ def _contract_symmetric(
 
 
 # ---------- Public API ----------
+
 
 def contract(
     *tensors: Tensor,
@@ -538,6 +544,7 @@ def contract_with_subscripts(
 
 # ---------- Block-sparse decomposition helpers ----------
 
+
 def _group_blocks_by_bond_charge(
     tensor: SymmetricTensor,
     left_leg_positions: list[int],
@@ -613,9 +620,18 @@ def _truncated_svd_symmetric(
     # the sector; columns by unique right_subkeys.
 
     # Per-sector SVD results
-    sector_results: dict[int, tuple[jax.Array, jax.Array, jax.Array,
-                                     list[BlockKey], list[BlockKey],
-                                     list[int], list[int]]] = {}
+    sector_results: dict[
+        int,
+        tuple[
+            jax.Array,
+            jax.Array,
+            jax.Array,
+            list[BlockKey],
+            list[BlockKey],
+            list[int],
+            list[int],
+        ],
+    ] = {}
 
     for q, entries in grouped.items():
         # Collect unique left / right subkeys (preserving order for determinism)
@@ -676,16 +692,27 @@ def _truncated_svd_symmetric(
                 ksign = _koszul_sign(parities, decomp_perm)
                 if ksign < 0:
                     flat_block = -flat_block
-            matrix = matrix.at[row_start:row_start + left_row_sizes[li],
-                               col_start:col_start + right_col_sizes[ri]].set(flat_block)
+            matrix = matrix.at[
+                row_start : row_start + left_row_sizes[li],
+                col_start : col_start + right_col_sizes[ri],
+            ].set(flat_block)
 
         # SVD this sector
         U_q, s_q, Vh_q = jnp.linalg.svd(matrix, full_matrices=False)
-        sector_results[q] = (U_q, s_q, Vh_q, left_subkeys, right_subkeys,
-                             left_row_sizes, right_col_sizes)
+        sector_results[q] = (
+            U_q,
+            s_q,
+            Vh_q,
+            left_subkeys,
+            right_subkeys,
+            left_row_sizes,
+            right_col_sizes,
+        )
 
     # Global truncation: merge all singular values across sectors
-    all_sv_pairs: list[tuple[float, int, int]] = []  # (value, sector_q, index_in_sector)
+    all_sv_pairs: list[
+        tuple[float, int, int]
+    ] = []  # (value, sector_q, index_in_sector)
     for q, (_, s_q, _, _, _, _, _) in sector_results.items():
         s_np = np.array(s_q)
         for i, val in enumerate(s_np):
@@ -707,7 +734,7 @@ def _truncated_svd_symmetric(
             trunc_sq = 0.0
             for i in range(n_total - 1, 0, -1):
                 trunc_sq += all_sv_pairs[i][0] ** 2
-                if trunc_sq / total_sq > max_truncation_err ** 2:
+                if trunc_sq / total_sq > max_truncation_err**2:
                     n_keep = i + 1
                     break
             else:
@@ -749,8 +776,12 @@ def _truncated_svd_symmetric(
 
     sym = tensor.indices[0].symmetry
 
-    bond_index_out = TensorIndex(sym, bond_charges, FlowDirection.OUT, label=new_bond_label)
-    bond_index_in = TensorIndex(sym, bond_charges, FlowDirection.IN, label=new_bond_label)
+    bond_index_out = TensorIndex(
+        sym, bond_charges, FlowDirection.OUT, label=new_bond_label
+    )
+    bond_index_in = TensorIndex(
+        sym, bond_charges, FlowDirection.IN, label=new_bond_label
+    )
 
     # Reconstruct U blocks: keys are (left_subkey..., bond_charge_q)
     # U has indices: (left_indices..., bond_index_out)
@@ -761,7 +792,9 @@ def _truncated_svd_symmetric(
     Vh_blocks: dict[BlockKey, jax.Array] = {}
 
     for q in sorted(sector_keep_count.keys()):
-        U_q, _, Vh_q, left_subkeys, right_subkeys, left_row_sizes, right_col_sizes = sector_results[q]
+        U_q, _, Vh_q, left_subkeys, right_subkeys, left_row_sizes, right_col_sizes = (
+            sector_results[q]
+        )
         n_q = sector_keep_count[q]
 
         # Slice U_q and Vh_q to keep only n_q singular vectors
@@ -772,7 +805,7 @@ def _truncated_svd_symmetric(
         row_offset = 0
         for li, lk in enumerate(left_subkeys):
             n_rows = left_row_sizes[li]
-            u_slice = U_q_trunc[row_offset:row_offset + n_rows, :]
+            u_slice = U_q_trunc[row_offset : row_offset + n_rows, :]
             # Reshape: (prod(left_shape_for_lk), n_q) -> (left_shape_for_lk..., n_q)
             left_shape = tuple(
                 int(np.sum(tensor.indices[ax].charges == ch))
@@ -787,7 +820,7 @@ def _truncated_svd_symmetric(
         col_offset = 0
         for ri, rk in enumerate(right_subkeys):
             n_cols = right_col_sizes[ri]
-            vh_slice = Vh_q_trunc[:, col_offset:col_offset + n_cols]
+            vh_slice = Vh_q_trunc[:, col_offset : col_offset + n_cols]
             right_shape = tuple(
                 int(np.sum(tensor.indices[ax].charges == ch))
                 for ax, ch in zip(right_axes, rk)
@@ -829,9 +862,18 @@ def _qr_symmetric(
     decomp_perm_qr = tuple(left_axes + right_axes)
 
     # Per-sector QR results
-    sector_results: dict[int, tuple[jax.Array, jax.Array,
-                                     list[BlockKey], list[BlockKey],
-                                     list[int], list[int], int]] = {}
+    sector_results: dict[
+        int,
+        tuple[
+            jax.Array,
+            jax.Array,
+            list[BlockKey],
+            list[BlockKey],
+            list[int],
+            list[int],
+            int,
+        ],
+    ] = {}
 
     bond_charges_list: list[int] = []
     sector_bond_offset: dict[int, int] = {}
@@ -894,22 +936,35 @@ def _qr_symmetric(
                 ksign = _koszul_sign(parities, decomp_perm_qr)
                 if ksign < 0:
                     flat_block = -flat_block
-            matrix = matrix.at[row_start:row_start + left_row_sizes[li],
-                               col_start:col_start + right_col_sizes[ri]].set(flat_block)
+            matrix = matrix.at[
+                row_start : row_start + left_row_sizes[li],
+                col_start : col_start + right_col_sizes[ri],
+            ].set(flat_block)
 
         Q_q, R_q = jnp.linalg.qr(matrix)
         bond_dim_q = Q_q.shape[1]
 
         sector_bond_offset[q] = len(bond_charges_list)
         bond_charges_list.extend([q] * bond_dim_q)
-        sector_results[q] = (Q_q, R_q, left_subkeys, right_subkeys,
-                             left_row_sizes, right_col_sizes, bond_dim_q)
+        sector_results[q] = (
+            Q_q,
+            R_q,
+            left_subkeys,
+            right_subkeys,
+            left_row_sizes,
+            right_col_sizes,
+            bond_dim_q,
+        )
 
     bond_charges = np.array(bond_charges_list, dtype=np.int32)
     sym = tensor.indices[0].symmetry
 
-    bond_index_out = TensorIndex(sym, bond_charges, FlowDirection.OUT, label=new_bond_label)
-    bond_index_in = TensorIndex(sym, bond_charges, FlowDirection.IN, label=new_bond_label)
+    bond_index_out = TensorIndex(
+        sym, bond_charges, FlowDirection.OUT, label=new_bond_label
+    )
+    bond_index_in = TensorIndex(
+        sym, bond_charges, FlowDirection.IN, label=new_bond_label
+    )
 
     Q_indices = left_indices + (bond_index_out,)
     R_indices = (bond_index_in,) + right_indices
@@ -917,14 +972,20 @@ def _qr_symmetric(
     Q_blocks: dict[BlockKey, jax.Array] = {}
     R_blocks: dict[BlockKey, jax.Array] = {}
 
-    for q, (Q_q, R_q, left_subkeys, right_subkeys,
-            left_row_sizes, right_col_sizes, bond_dim_q) in sector_results.items():
-
+    for q, (
+        Q_q,
+        R_q,
+        left_subkeys,
+        right_subkeys,
+        left_row_sizes,
+        right_col_sizes,
+        bond_dim_q,
+    ) in sector_results.items():
         # Split Q rows back into left_subkey blocks
         row_offset = 0
         for li, lk in enumerate(left_subkeys):
             n_rows = left_row_sizes[li]
-            q_slice = Q_q[row_offset:row_offset + n_rows, :]
+            q_slice = Q_q[row_offset : row_offset + n_rows, :]
             left_shape = tuple(
                 int(np.sum(tensor.indices[ax].charges == ch))
                 for ax, ch in zip(left_axes, lk)
@@ -937,7 +998,7 @@ def _qr_symmetric(
         col_offset = 0
         for ri, rk in enumerate(right_subkeys):
             n_cols = right_col_sizes[ri]
-            r_slice = R_q[:, col_offset:col_offset + n_cols]
+            r_slice = R_q[:, col_offset : col_offset + n_cols]
             right_shape = tuple(
                 int(np.sum(tensor.indices[ax].charges == ch))
                 for ax, ch in zip(right_axes, rk)
@@ -953,6 +1014,7 @@ def _qr_symmetric(
 
 
 # ---------- Truncated SVD ----------
+
 
 def truncated_svd(
     tensor: Tensor,
@@ -1022,9 +1084,13 @@ def truncated_svd(
     # Dispatch to block-sparse path for SymmetricTensor
     if isinstance(tensor, SymmetricTensor):
         return _truncated_svd_symmetric(
-            tensor, left_labels, right_labels,
-            max_singular_values, max_truncation_err,
-            new_bond_label, normalize,
+            tensor,
+            left_labels,
+            right_labels,
+            max_singular_values,
+            max_truncation_err,
+            new_bond_label,
+            normalize,
         )
 
     # Build axis ordering: left labels first, then right labels
@@ -1098,11 +1164,16 @@ def truncated_svd(
     elif right_indices:
         sym = right_indices[0].symmetry
     else:
-        from tnjax.core.symmetry import U1Symmetry
+        from tenax.core.symmetry import U1Symmetry
+
         sym = U1Symmetry()
 
-    bond_index_out = TensorIndex(sym, bond_charges_out, FlowDirection.OUT, label=new_bond_label)
-    bond_index_in = TensorIndex(sym, bond_charges_out, FlowDirection.IN, label=new_bond_label)
+    bond_index_out = TensorIndex(
+        sym, bond_charges_out, FlowDirection.OUT, label=new_bond_label
+    )
+    bond_index_in = TensorIndex(
+        sym, bond_charges_out, FlowDirection.IN, label=new_bond_label
+    )
 
     U_indices = left_indices + (bond_index_out,)
     Vh_indices = (bond_index_in,) + right_indices
@@ -1114,6 +1185,7 @@ def truncated_svd(
 
 
 # ---------- QR Decomposition ----------
+
 
 def qr_decompose(
     tensor: Tensor,
@@ -1171,11 +1243,16 @@ def qr_decompose(
     if left_indices:
         sym = left_indices[0].symmetry
     else:
-        from tnjax.core.symmetry import U1Symmetry
+        from tenax.core.symmetry import U1Symmetry
+
         sym = U1Symmetry()
 
-    bond_index_out = TensorIndex(sym, bond_charges, FlowDirection.OUT, label=new_bond_label)
-    bond_index_in = TensorIndex(sym, bond_charges, FlowDirection.IN, label=new_bond_label)
+    bond_index_out = TensorIndex(
+        sym, bond_charges, FlowDirection.OUT, label=new_bond_label
+    )
+    bond_index_in = TensorIndex(
+        sym, bond_charges, FlowDirection.IN, label=new_bond_label
+    )
 
     Q_indices = left_indices + (bond_index_out,)
     R_indices = (bond_index_in,) + right_indices

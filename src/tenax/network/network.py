@@ -19,9 +19,9 @@ from typing import Any
 
 import networkx as nx
 
-from tnjax.contraction.contractor import _labels_to_subscripts, contract_with_subscripts
-from tnjax.core.index import Label, TensorIndex
-from tnjax.core.tensor import Tensor
+from tenax.contraction.contractor import _labels_to_subscripts, contract_with_subscripts
+from tenax.core.index import Label, TensorIndex
+from tenax.core.tensor import Tensor
 
 NodeId = Hashable
 
@@ -72,7 +72,9 @@ class TensorNetwork:
             ValueError: If tensor has duplicate labels.
         """
         if node_id in self._tensors:
-            raise ValueError(f"Node {node_id!r} already exists. Use replace_tensor() to update.")
+            raise ValueError(
+                f"Node {node_id!r} already exists. Use replace_tensor() to update."
+            )
 
         labels = tensor.labels()
         if len(labels) != len(set(labels)):
@@ -261,7 +263,8 @@ class TensorNetwork:
                 return
             # Also check reversed direction
             if (
-                v == node_a and u == node_b
+                v == node_a
+                and u == node_b
                 and data.get("label_a") == label_b
                 and data.get("label_b") == label_a
             ):
@@ -397,13 +400,15 @@ class TensorNetwork:
         # Build a mapping: for each node, which labels should be renamed and to what
         relabel_map: dict[NodeId, dict[Label, Label]] = {n: {} for n in nodes}
 
-        for (node_a, label_a, node_b, label_b) in internal_edges:
+        for node_a, label_a, node_b, label_b in internal_edges:
             # Make label_b on node_b match label_a on node_a
             if label_a != label_b:
                 # Rename label_b to label_a on node_b
                 # But be careful: label_a might already be used on node_b for something else
-                if label_a not in self._tensors[node_b].labels() or \
-                        label_a in relabel_map[node_b].values():
+                if (
+                    label_a not in self._tensors[node_b].labels()
+                    or label_a in relabel_map[node_b].values()
+                ):
                     relabel_map[node_b][label_b] = label_a
 
         # Apply relabeling
@@ -481,6 +486,7 @@ class TensorNetwork:
 # ------------------------------------------------------------------ #
 # MPS / PEPS convenience constructors                                #
 # ------------------------------------------------------------------ #
+
 
 def build_mps(
     tensors: list[Tensor],

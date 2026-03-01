@@ -9,7 +9,7 @@ with TRG.
 ```python
 import jax
 import numpy as np
-from tnjax import (
+from tenax import (
     U1Symmetry, TensorIndex, FlowDirection,
     DenseTensor, contract,
 )
@@ -42,7 +42,7 @@ print(C.todense().shape)  # (3, 5)
 ## Example 2 -- DMRG ground state of the Heisenberg chain
 
 ```python
-from tnjax import (
+from tenax import (
     DMRGConfig, dmrg,
     build_mpo_heisenberg, build_random_mps,
 )
@@ -68,7 +68,7 @@ print(f"Converged: {result.converged}")
 
 ```python
 import math
-from tnjax import TRGConfig, trg, compute_ising_tensor, ising_free_energy_exact
+from tenax import TRGConfig, trg, compute_ising_tensor, ising_free_energy_exact
 
 beta_c = math.log(1 + math.sqrt(2)) / 2  # critical temperature
 tensor = compute_ising_tensor(beta_c)

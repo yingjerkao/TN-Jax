@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tnjax import build_bulk_mpo_heisenberg, iDMRGConfig, idmrg
+from tenax import build_bulk_mpo_heisenberg, idmrg, iDMRGConfig
 
 _SIZES = {
     "small": {"chi": 32, "iterations": 50},

@@ -22,7 +22,7 @@ jax.config.update("jax_enable_x64", True)
 
 import numpy as np
 
-from tnjax import TRGConfig, compute_ising_tensor, ising_free_energy_exact, trg
+from tenax import TRGConfig, compute_ising_tensor, ising_free_energy_exact, trg
 
 
 def run_trg_ising(

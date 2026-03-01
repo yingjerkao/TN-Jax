@@ -26,12 +26,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tnjax.algorithms.dmrg import (
+from tenax.algorithms.dmrg import (
     _lanczos_solve,
 )
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor, Tensor
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry
+from tenax.core.tensor import DenseTensor, Tensor
 
 # ---------------------------------------------------------------------------
 # Config & Result
@@ -131,9 +131,9 @@ def build_bulk_mpo_heisenberg(
     bond_d = np.zeros(d, dtype=np.int32)
 
     indices = (
-        TensorIndex(sym, bond_dw, FlowDirection.IN,  label="w_l"),
-        TensorIndex(sym, bond_d,  FlowDirection.IN,  label="mpo_top"),
-        TensorIndex(sym, bond_d,  FlowDirection.OUT, label="mpo_bot"),
+        TensorIndex(sym, bond_dw, FlowDirection.IN, label="w_l"),
+        TensorIndex(sym, bond_d, FlowDirection.IN, label="mpo_top"),
+        TensorIndex(sym, bond_d, FlowDirection.OUT, label="mpo_bot"),
         TensorIndex(sym, bond_dw, FlowDirection.OUT, label="w_r"),
     )
     return DenseTensor(W, indices)
@@ -171,7 +171,7 @@ def build_bulk_mpo_heisenberg_cylinder(
             "boundary creates frustrated odd-length cycles."
         )
 
-    d = 2 ** Ly
+    d = 2**Ly
     D_w = 3 * Ly + 2
 
     # --- Single-spin operators ---
@@ -207,8 +207,7 @@ def build_bulk_mpo_heisenberg_cylinder(
                 continue
             seen_bonds.add(bond)
             h_ring = h_ring + J * (
-                Sz[y] @ Sz[y_next]
-                + 0.5 * (Sp[y] @ Sm[y_next] + Sm[y] @ Sp[y_next])
+                Sz[y] @ Sz[y_next] + 0.5 * (Sp[y] @ Sm[y_next] + Sm[y] @ Sp[y_next])
             )
 
     # --- Build MPO W-matrix ---
@@ -225,14 +224,18 @@ def build_bulk_mpo_heisenberg_cylinder(
 
     for y in range(Ly):
         # Channel completions: channel → done
-        W = W.at[y + 1, :, :, 0].set(Sz[y])              # Sz channel
-        W = W.at[Ly + y + 1, :, :, 0].set(Sp[y])         # S+ channel (completes S-·S+)
-        W = W.at[2 * Ly + y + 1, :, :, 0].set(Sm[y])     # S- channel (completes S+·S-)
+        W = W.at[y + 1, :, :, 0].set(Sz[y])  # Sz channel
+        W = W.at[Ly + y + 1, :, :, 0].set(Sp[y])  # S+ channel (completes S-·S+)
+        W = W.at[2 * Ly + y + 1, :, :, 0].set(Sm[y])  # S- channel (completes S+·S-)
 
         # Channel initiations: vacuum → channel
-        W = W.at[D_w - 1, :, :, y + 1].set(J * Sz[y])              # vacuum → Sz
-        W = W.at[D_w - 1, :, :, Ly + y + 1].set((J / 2) * Sm[y])  # vacuum → Sp (send Sm)
-        W = W.at[D_w - 1, :, :, 2 * Ly + y + 1].set((J / 2) * Sp[y])  # vacuum → Sm (send Sp)
+        W = W.at[D_w - 1, :, :, y + 1].set(J * Sz[y])  # vacuum → Sz
+        W = W.at[D_w - 1, :, :, Ly + y + 1].set(
+            (J / 2) * Sm[y]
+        )  # vacuum → Sp (send Sm)
+        W = W.at[D_w - 1, :, :, 2 * Ly + y + 1].set(
+            (J / 2) * Sp[y]
+        )  # vacuum → Sm (send Sp)
 
     # --- Wrap as DenseTensor ---
     sym = U1Symmetry()
@@ -240,9 +243,9 @@ def build_bulk_mpo_heisenberg_cylinder(
     bond_d = np.zeros(d, dtype=np.int32)
 
     indices = (
-        TensorIndex(sym, bond_dw, FlowDirection.IN,  label="w_l"),
-        TensorIndex(sym, bond_d,  FlowDirection.IN,  label="mpo_top"),
-        TensorIndex(sym, bond_d,  FlowDirection.OUT, label="mpo_bot"),
+        TensorIndex(sym, bond_dw, FlowDirection.IN, label="w_l"),
+        TensorIndex(sym, bond_d, FlowDirection.IN, label="mpo_top"),
+        TensorIndex(sym, bond_d, FlowDirection.OUT, label="mpo_bot"),
         TensorIndex(sym, bond_dw, FlowDirection.OUT, label="w_r"),
     )
     return DenseTensor(W, indices)
@@ -263,8 +266,8 @@ def _trivial_left_env(D_w: int, dtype: Any = jnp.float64) -> DenseTensor:
     # In the standard MPO convention, the vacuum state is the last row.
     data = data.at[0, D_w - 1, 0].set(1.0)
     indices = (
-        TensorIndex(sym, bond_mps, FlowDirection.IN,  label="env_mps_l"),
-        TensorIndex(sym, bond_mpo, FlowDirection.IN,  label="env_mpo_l"),
+        TensorIndex(sym, bond_mps, FlowDirection.IN, label="env_mps_l"),
+        TensorIndex(sym, bond_mpo, FlowDirection.IN, label="env_mpo_l"),
         TensorIndex(sym, bond_mps, FlowDirection.OUT, label="env_mps_conj_l"),
     )
     return DenseTensor(data, indices)
@@ -281,7 +284,7 @@ def _trivial_right_env(D_w: int, dtype: Any = jnp.float64) -> DenseTensor:
     indices = (
         TensorIndex(sym, bond_mps, FlowDirection.OUT, label="env_mps_r"),
         TensorIndex(sym, bond_mpo, FlowDirection.OUT, label="env_mpo_r"),
-        TensorIndex(sym, bond_mps, FlowDirection.IN,  label="env_mps_conj_r"),
+        TensorIndex(sym, bond_mps, FlowDirection.IN, label="env_mps_conj_r"),
     )
     return DenseTensor(data, indices)
 
@@ -298,7 +301,11 @@ def _idmrg_matvec(
     theta = theta_flat.reshape(theta_shape)
     result = jnp.einsum(
         "abc,apqd,bpse,eqtf,dfg->cstg",
-        L_env, theta, W_l, W_r, R_env,
+        L_env,
+        theta,
+        W_l,
+        W_r,
+        R_env,
     )
     return result.ravel()
 
@@ -329,8 +336,8 @@ def _compute_local_energy(
     # Build 2-site Hamiltonian from the MPO: H[p,q,p',q'] = sum_e W[D-1,p,p',e] * W[e,q,q',0]
     # (vacuum row of left site → done column of right site).
     D_w = W_bulk.shape[0]
-    W_left = W_bulk[D_w - 1, :, :, :]   # (d, d, D_w) — vacuum row
-    W_right = W_bulk[:, :, :, 0]         # (D_w, d, d) — done column
+    W_left = W_bulk[D_w - 1, :, :, :]  # (d, d, D_w) — vacuum row
+    W_right = W_bulk[:, :, :, 0]  # (D_w, d, d) — done column
     # H_2site[p, p', q, q'] = sum_e W_left[p, p', e] * W_right[e, q, q']
     H_2site = jnp.einsum("abe,ecd->abcd", W_left, W_right)
     # Contract indices: H_2site[p_top, p_bot, q_top, q_bot]
@@ -345,7 +352,9 @@ def _compute_local_energy(
     #   p_bot, q_bot = ket (input) physical indices
     energy = jnp.einsum(
         "asrb,PsQr,aPQb->",
-        jnp.conj(theta), H_2site, theta,
+        jnp.conj(theta),
+        H_2site,
+        theta,
     )
     norm = jnp.einsum("apqb,apqb->", jnp.conj(theta), theta)
     return float(energy / norm)
@@ -437,9 +446,7 @@ def idmrg(
             theta = theta + noise
         else:
             key, subkey = jax.random.split(key)
-            theta = jax.random.normal(
-                subkey, (chi_env, d, d, chi_env), dtype=dtype
-            )
+            theta = jax.random.normal(subkey, (chi_env, d, d, chi_env), dtype=dtype)
         theta = theta / jnp.linalg.norm(theta)
 
         theta_shape = theta.shape
@@ -509,7 +516,7 @@ def idmrg(
         if n_e >= 4:
             n_half = min(n_e // 2, 5)
             avg_recent = sum(energies_per_step[-n_half:]) / n_half
-            avg_prev = sum(energies_per_step[-2 * n_half:-n_half]) / n_half
+            avg_prev = sum(energies_per_step[-2 * n_half : -n_half]) / n_half
             if abs(avg_recent - avg_prev) < config.convergence_tol:
                 converged = True
                 if config.verbose:

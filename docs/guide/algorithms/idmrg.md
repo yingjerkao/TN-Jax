@@ -11,7 +11,7 @@ growth step the centre bond is truncated via SVD to a maximum bond
 dimension $\chi$. The energy-per-site estimate converges as the effective
 environment builds up around the unit cell.
 
-Key properties of the TN-Jax implementation:
+Key properties of the Tenax implementation:
 
 - **2-site growth** algorithm: two sites are added per iteration.
 - The bulk Hamiltonian is specified as a single repeated MPO tensor
@@ -23,7 +23,7 @@ Key properties of the TN-Jax implementation:
 ## Configuration
 
 ```python
-from tnjax import iDMRGConfig
+from tenax import iDMRGConfig
 
 config = iDMRGConfig(
     max_bond_dim=100,       # maximum MPS bond dimension (chi)
@@ -49,7 +49,7 @@ config = iDMRGConfig(
 ## Example -- Heisenberg chain
 
 ```python
-from tnjax import iDMRGConfig, idmrg, build_bulk_mpo_heisenberg
+from tenax import iDMRGConfig, idmrg, build_bulk_mpo_heisenberg
 
 # Build the bulk W-tensor for the spin-1/2 XXZ Heisenberg model
 bulk_mpo = build_bulk_mpo_heisenberg(Jz=1.0, Jxy=1.0, hz=0.0)
@@ -74,7 +74,7 @@ Heisenberg model on an infinite cylinder of circumference $L_y$. Each
 $d = 2^{L_y}$).
 
 ```python
-from tnjax import iDMRGConfig, idmrg, build_bulk_mpo_heisenberg_cylinder
+from tenax import iDMRGConfig, idmrg, build_bulk_mpo_heisenberg_cylinder
 
 Ly = 4
 bulk_mpo = build_bulk_mpo_heisenberg_cylinder(Ly=Ly, J=1.0)
@@ -110,5 +110,5 @@ $5 \times d \times d \times 5$) for the spin-1/2 XXZ Heisenberg model:
 
 $$H = J_z \sum_i S^z_i S^z_{i+1} + \frac{J_{xy}}{2} \sum_i (S^+_i S^-_{i+1} + S^-_i S^+_{i+1}) + h_z \sum_i S^z_i$$
 
-For finite chains, use {func}`~tnjax.build_mpo_heisenberg` instead (see
+For finite chains, use {func}`~tenax.build_mpo_heisenberg` instead (see
 {doc}`dmrg`). For custom Hamiltonians, see {doc}`auto_mpo`.

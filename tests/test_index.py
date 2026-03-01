@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry, ZnSymmetry
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry, ZnSymmetry
 
 
 class TestFlowDirection:

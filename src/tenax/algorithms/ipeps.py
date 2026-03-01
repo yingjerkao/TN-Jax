@@ -27,11 +27,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tnjax.core import EPS
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor
-from tnjax.network.network import TensorNetwork
+from tenax.core import EPS
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry
+from tenax.core.tensor import DenseTensor
+from tenax.network.network import TensorNetwork
 
 
 @dataclass
@@ -1755,7 +1755,7 @@ def optimize_gs_ad(
     """
     import optax
 
-    from tnjax.algorithms.ad_utils import ctm_converge
+    from tenax.algorithms.ad_utils import ctm_converge
 
     gate = jnp.array(hamiltonian_gate)
     d_phys = gate.shape[0]

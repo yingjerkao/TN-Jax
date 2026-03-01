@@ -25,10 +25,10 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from tnjax.core.index import FlowDirection, TensorIndex
-from tnjax.core.symmetry import U1Symmetry
-from tnjax.core.tensor import DenseTensor, SymmetricTensor
-from tnjax.network.network import TensorNetwork
+from tenax.core.index import FlowDirection, TensorIndex
+from tenax.core.symmetry import U1Symmetry
+from tenax.core.tensor import DenseTensor, SymmetricTensor
+from tenax.network.network import TensorNetwork
 
 # ---------------------------------------------------------------------------
 # Built-in operator sets
@@ -90,9 +90,7 @@ class HamiltonianTerm:
 # ---------------------------------------------------------------------------
 
 
-def _assign_bond_states(
-    terms: list[HamiltonianTerm], L: int
-) -> list[dict[int, int]]:
+def _assign_bond_states(terms: list[HamiltonianTerm], L: int) -> list[dict[int, int]]:
     """Assign MPO bond-state indices to in-flight terms at each internal bond.
 
     Returns ``bond_states`` where ``bond_states[j][t_id]`` is the state index
@@ -428,8 +426,8 @@ def _w_matrices_to_mpo(
         right_label = "w_right" if i == L - 1 else f"w{i}_{i + 1}"
 
         indices = (
-            TensorIndex(sym, bond_l, FlowDirection.IN,  label=left_label),
-            TensorIndex(sym, bond_d, FlowDirection.IN,  label=f"mpo_top_{i}"),
+            TensorIndex(sym, bond_l, FlowDirection.IN, label=left_label),
+            TensorIndex(sym, bond_d, FlowDirection.IN, label=f"mpo_top_{i}"),
             TensorIndex(sym, bond_d, FlowDirection.OUT, label=f"mpo_bot_{i}"),
             TensorIndex(sym, bond_r, FlowDirection.OUT, label=right_label),
         )
@@ -530,9 +528,7 @@ class AutoMPO:
                     f"Available: {sorted(self._site_ops)}"
                 )
             if not isinstance(site, int) or not (0 <= site < self.L):
-                raise ValueError(
-                    f"Site {site!r} out of range [0, {self.L})."
-                )
+                raise ValueError(f"Site {site!r} out of range [0, {self.L}).")
             pairs.append((site, self._site_ops[op_name]))
 
         pairs.sort(key=lambda x: x[0])
@@ -591,9 +587,7 @@ class AutoMPO:
 
         identity = np.eye(self.d, dtype=np.float64)
         bond_states = _assign_bond_states(self._terms, self.L)
-        w_mats = _build_w_matrices(
-            self._terms, bond_states, self.L, self.d, identity
-        )
+        w_mats = _build_w_matrices(self._terms, bond_states, self.L, self.d, identity)
 
         if compress and self.L > 1:
             for j in range(self.L - 1):
@@ -618,7 +612,10 @@ class AutoMPO:
                 self._terms, bond_states, self.L, phys_charges
             )
             return _w_matrices_to_symmetric_mpo(
-                w_mats, self.d, phys_charges, bond_charges,
+                w_mats,
+                self.d,
+                phys_charges,
+                bond_charges,
                 dtype=dtype,
             )
 
@@ -684,6 +681,9 @@ def build_auto_mpo(
     for term in terms_spec:
         auto.add_term(term[0], *term[1:])
     return auto.to_mpo(
-        compress=compress, compress_tol=compress_tol, dtype=dtype,
-        symmetric=symmetric, phys_charges=phys_charges,
+        compress=compress,
+        compress_tol=compress_tol,
+        dtype=dtype,
+        symmetric=symmetric,
+        phys_charges=phys_charges,
     )

@@ -38,9 +38,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from tnjax.contraction.contractor import contract, contract_with_subscripts
-from tnjax.core.index import Label
-from tnjax.core.tensor import Tensor
+from tenax.contraction.contractor import contract, contract_with_subscripts
+from tenax.core.index import Label
+from tenax.core.tensor import Tensor
 
 # ---------- .net file parser ----------
 
@@ -94,7 +94,11 @@ def parse_netfile(
             if tout_seen:
                 raise ValueError(f"Line {lineno}: duplicate TOUT declaration")
             tout_seen = True
-            tout = [lbl.strip() for lbl in value.split(",") if lbl.strip()] if value else []
+            tout = (
+                [lbl.strip() for lbl in value.split(",") if lbl.strip()]
+                if value
+                else []
+            )
         elif key == "ORDER":
             if order is not None:
                 raise ValueError(f"Line {lineno}: duplicate ORDER declaration")
@@ -103,14 +107,10 @@ def parse_netfile(
             # Tensor declaration
             name = key
             if name in tensors:
-                raise ValueError(
-                    f"Line {lineno}: duplicate tensor name {name!r}"
-                )
+                raise ValueError(f"Line {lineno}: duplicate tensor name {name!r}")
             labels = [lbl.strip() for lbl in value.split(",") if lbl.strip()]
             if not labels:
-                raise ValueError(
-                    f"Line {lineno}: tensor {name!r} has no labels"
-                )
+                raise ValueError(f"Line {lineno}: tensor {name!r} has no labels")
             tensors[name] = labels
 
     if not tensors:
@@ -169,8 +169,7 @@ def _parse_order(
     tree, pos = _parse_order_expr(tokens, 0)
     if pos != len(tokens):
         raise ValueError(
-            f"ORDER: unexpected tokens after position {pos}: "
-            f"{tokens[pos:]}"
+            f"ORDER: unexpected tokens after position {pos}: {tokens[pos:]}"
         )
 
     steps: list[tuple[str, str]] = []
@@ -217,9 +216,7 @@ def _tokenize_order(s: str) -> list[str]:
     return tokens
 
 
-def _parse_order_expr(
-    tokens: list[str], pos: int
-) -> tuple[Any, int]:
+def _parse_order_expr(tokens: list[str], pos: int) -> tuple[Any, int]:
     """Recursive descent parser for ORDER expressions.
 
     Returns ``(tree, next_pos)`` where *tree* is either a string (tensor
@@ -238,9 +235,7 @@ def _parse_order_expr(
         pos += 1  # consume ','
         right, pos = _parse_order_expr(tokens, pos)
         if pos >= len(tokens) or tokens[pos] != ")":
-            raise ValueError(
-                f"ORDER: expected ')' at position {pos}"
-            )
+            raise ValueError(f"ORDER: expected ')' at position {pos}")
         pos += 1  # consume ')'
         return (left, right), pos
 
@@ -261,7 +256,7 @@ def _labels_to_subscripts_from_names(
 ) -> str:
     """Build an einsum subscript string from label names only (no Tensor objects).
 
-    Mirrors :func:`tnjax.contraction.contractor._labels_to_subscripts` but
+    Mirrors :func:`tenax.contraction.contractor._labels_to_subscripts` but
     operates on label names alone, enabling pre-computation at parse time.
 
     Args:
@@ -285,18 +280,14 @@ def _labels_to_subscripts_from_names(
 
     for lbl, count in label_counts.items():
         if count > 2:
-            raise ValueError(
-                f"Label {lbl!r} appears {count} times (max 2)"
-            )
+            raise ValueError(f"Label {lbl!r} appears {count} times (max 2)")
 
     free_labels = {lbl for lbl, cnt in label_counts.items() if cnt == 1}
 
     # Assign characters
     all_labels = sorted(label_counts.keys())
     if len(all_labels) > 52:
-        raise ValueError(
-            f"Too many unique labels ({len(all_labels)}); max 52"
-        )
+        raise ValueError(f"Too many unique labels ({len(all_labels)}); max 52")
     chars = string.ascii_lowercase + string.ascii_uppercase
     label_to_char = {lbl: chars[i] for i, lbl in enumerate(all_labels)}
 
@@ -362,9 +353,7 @@ class NetworkBlueprint:
         # Pre-compute ORDER steps if provided
         self._order_steps: list[tuple[str, str]] | None = None
         if self._order_str is not None:
-            self._order_steps = _parse_order(
-                self._order_str, set(self._node_order)
-            )
+            self._order_steps = _parse_order(self._order_str, set(self._node_order))
 
         # Pre-compute einsum subscripts (for the no-ORDER path)
         self._subscripts: str = _labels_to_subscripts_from_names(
@@ -413,10 +402,7 @@ class NetworkBlueprint:
             ValueError: If the tensor's rank doesn't match the blueprint.
         """
         if name not in self._tensor_labels:
-            raise KeyError(
-                f"Unknown tensor name {name!r}. "
-                f"Known: {self._node_order}"
-            )
+            raise KeyError(f"Unknown tensor name {name!r}. Known: {self._node_order}")
 
         blueprint_labels = self._tensor_labels[name]
         if tensor.ndim != len(blueprint_labels):
@@ -453,9 +439,7 @@ class NetworkBlueprint:
             # If order differs, transpose to match blueprint ordering
             if [str(lb) for lb in current] != blueprint_labels:
                 perm = [
-                    next(
-                        i for i, cl in enumerate(current) if str(cl) == bl
-                    )
+                    next(i for i, cl in enumerate(current) if str(cl) == bl)
                     for bl in blueprint_labels
                 ]
                 tensor = tensor.transpose(tuple(perm))
@@ -495,9 +479,7 @@ class NetworkBlueprint:
         """
         if not self.is_ready():
             missing = set(self._node_order) - set(self._tensors.keys())
-            raise RuntimeError(
-                f"Cannot launch: missing tensors {sorted(missing)}"
-            )
+            raise RuntimeError(f"Cannot launch: missing tensors {sorted(missing)}")
 
         if self._order_steps is not None:
             return self._launch_ordered()
@@ -508,7 +490,7 @@ class NetworkBlueprint:
         tensors = [self._tensors[name] for name in self._node_order]
 
         # Build output_indices from the actual tensors
-        from tnjax.contraction.contractor import _labels_to_subscripts
+        from tenax.contraction.contractor import _labels_to_subscripts
 
         _, output_indices = _labels_to_subscripts(tensors, self._tout)
         return contract_with_subscripts(
@@ -553,18 +535,16 @@ class NetworkBlueprint:
         across tensors are auto-connected.
 
         Returns:
-            :class:`~tnjax.network.network.TensorNetwork`
+            :class:`~tenax.network.network.TensorNetwork`
 
         Raises:
             RuntimeError: If not all tensor slots are filled.
         """
         if not self.is_ready():
             missing = set(self._node_order) - set(self._tensors.keys())
-            raise RuntimeError(
-                f"Cannot convert: missing tensors {sorted(missing)}"
-            )
+            raise RuntimeError(f"Cannot convert: missing tensors {sorted(missing)}")
 
-        from tnjax.network.network import TensorNetwork
+        from tenax.network.network import TensorNetwork
 
         tn = TensorNetwork(name="from_netfile")
         for name in self._node_order:

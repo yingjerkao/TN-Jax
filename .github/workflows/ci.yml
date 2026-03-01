@@ -35,7 +35,7 @@ jobs:
       - name: Run core tests
         run: |
           uv run pytest tests/ -m "core" \
-            --cov=tnjax \
+            --cov=tenax \
             --cov-report=xml \
             --cov-report=term-missing \
             -v
@@ -73,7 +73,7 @@ jobs:
       - name: Run all tests
         run: |
           uv run pytest tests/ \
-            --cov=tnjax \
+            --cov=tenax \
             --cov-report=xml \
             --cov-report=term-missing \
             -v
@@ -109,7 +109,7 @@ jobs:
       - name: Run core tests
         run: |
           uv run pytest tests/ -m "core" \
-            --cov=tnjax \
+            --cov=tenax \
             --cov-report=term-missing \
             -v
 

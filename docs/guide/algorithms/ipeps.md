@@ -1,7 +1,7 @@
 # iPEPS
 
 Infinite Projected Entangled Pair States (iPEPS) is a variational ansatz for
-2D quantum lattice models. TN-Jax implements the **simple update** for
+2D quantum lattice models. Tenax implements the **simple update** for
 optimisation and the **Corner Transfer Matrix (CTM)** method for computing
 observables.
 
@@ -41,7 +41,7 @@ matrices. For AD-based optimization, use `truncated_svd_ad` instead
 ## Configuration
 
 ```python
-from tnjax import iPEPSConfig, CTMConfig
+from tenax import iPEPSConfig, CTMConfig
 
 ctm_config = CTMConfig(
     chi=20,          # CTM environment bond dimension
@@ -71,7 +71,7 @@ larger `dt` because the two independent tensors converge more slowly.
 
 ```python
 import jax.numpy as jnp
-from tnjax import iPEPSConfig, CTMConfig, ipeps
+from tenax import iPEPSConfig, CTMConfig, ipeps
 
 # Heisenberg gate: H = Sz Sz + 0.5 (S+ S- + S- S+)
 Sz = 0.5 * jnp.array([[1, 0], [0, -1]], dtype=jnp.float32)
@@ -119,7 +119,7 @@ The `ctm()` function can be called independently to compute the
 environment for an existing PEPS tensor:
 
 ```python
-from tnjax import ctm, CTMConfig
+from tenax import ctm, CTMConfig
 
 env = ctm(A_tensor, CTMConfig(chi=20, max_iter=100))
 ```
@@ -139,7 +139,7 @@ is the minimal unit cell for Néel-ordered states.
 Compute CTM environments for an existing 2-site iPEPS:
 
 ```python
-from tnjax import ctm_2site, CTMConfig
+from tenax import ctm_2site, CTMConfig
 
 env_A, env_B = ctm_2site(A, B, CTMConfig(chi=20, max_iter=100))
 ```
@@ -158,7 +158,7 @@ Compute the energy per site for a 2-site checkerboard iPEPS given
 converged environments:
 
 ```python
-from tnjax import compute_energy_ctm_2site
+from tenax import compute_energy_ctm_2site
 
 energy = compute_energy_ctm_2site(A, B, env_A, env_B, H_bond, d=2)
 ```
@@ -173,7 +173,7 @@ fixed-point equation to compute exact gradients of the energy with
 respect to the site tensor, then optimises with optax:
 
 ```python
-from tnjax import iPEPSConfig, CTMConfig, optimize_gs_ad
+from tenax import iPEPSConfig, CTMConfig, optimize_gs_ad
 
 config = iPEPSConfig(
     max_bond_dim=2,

@@ -1,12 +1,12 @@
 # Contraction Semantics
 
-This document describes the label-based contraction model used in TN-Jax.
+This document describes the label-based contraction model used in Tenax.
 
 ---
 
 ## Overview
 
-TN-Jax contracts tensors using **shared string labels** rather than explicit
+Tenax contracts tensors using **shared string labels** rather than explicit
 einsum subscript strings. Two tensors that carry the same label on one of their
 legs are automatically contracted over that pair of legs. This is identical in
 spirit to the Cytnx / ITensor interface.
@@ -26,7 +26,7 @@ spirit to the Cytnx / ITensor interface.
 ## `contract(*tensors, output_labels, optimize)`
 
 ```python
-from tnjax import contract
+from tenax import contract
 
 result = contract(t1, t2, t3, output_labels=["a", "c"], optimize="auto")
 ```

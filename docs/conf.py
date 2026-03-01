@@ -1,10 +1,10 @@
-"""Sphinx configuration for TN-Jax documentation."""
+"""Sphinx configuration for Tenax documentation."""
 
 import warnings
 
-project = "TN-Jax"
-copyright = "2025, TN-Jax Contributors"
-author = "TN-Jax Contributors"
+project = "Tenax"
+copyright = "2025, Tenax Contributors"
+author = "Tenax Contributors"
 release = "0.1.0"
 
 extensions = [
@@ -50,7 +50,7 @@ intersphinx_mapping = {
 
 # Theme
 html_theme = "furo"
-html_title = "TN-Jax"
+html_title = "Tenax"
 
 # Source
 source_suffix = {
@@ -60,5 +60,6 @@ source_suffix = {
 exclude_patterns = ["_build"]
 
 # Suppress third-party deprecation warnings during build
-warnings.filterwarnings("ignore", category=DeprecationWarning,
-                        module="sphinx_autodoc_typehints")
+warnings.filterwarnings(
+    "ignore", category=DeprecationWarning, module="sphinx_autodoc_typehints"
+)

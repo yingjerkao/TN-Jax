@@ -22,7 +22,7 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from tnjax import HOTRGConfig, compute_ising_tensor, hotrg, ising_free_energy_exact
+from tenax import HOTRGConfig, compute_ising_tensor, hotrg, ising_free_energy_exact
 
 # ---------------------------------------------------------------------------
 # Parameters

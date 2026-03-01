@@ -14,6 +14,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Documentation
 
-- When adding new public API (algorithms, classes, functions), update both `README.md` (features list, example sections) and `src/tnjax/__init__.py` (`__all__` exports).
+- When adding new public API (algorithms, classes, functions), update both `README.md` (features list, example sections) and `src/tenax/__init__.py` (`__all__` exports).
 - Sphinx docs live in `docs/`; build with `cd docs && make html`.
 - Keep `README.md` example code consistent with actual function signatures and test usage.

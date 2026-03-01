@@ -1,6 +1,8 @@
-# TN-Jax
+# Tenax
 
 A JAX-based tensor network library with symmetry-aware block-sparse tensors and label-based contraction.
+
+The name **Tenax** combines **Ten**sor network + J**ax**, and is also Latin for "holding fast" — reflecting how tensor networks bind indices together through contraction.
 
 ## Features
 
@@ -21,19 +23,19 @@ A JAX-based tensor network library with symmetry-aware block-sparse tensors and 
 
 ```bash
 # CPU only (default)
-pip install tnjax
+pip install tenax-tn
 
 # NVIDIA GPU (CUDA 13)
-pip install tnjax[cuda13]
+pip install tenax-tn[cuda13]
 
 # NVIDIA GPU (CUDA 12)
-pip install tnjax[cuda12]
+pip install tenax-tn[cuda12]
 
 # Google Cloud TPU
-pip install tnjax[tpu]
+pip install tenax-tn[tpu]
 
 # Apple Silicon GPU (macOS, experimental)
-pip install tnjax[metal]
+pip install tenax-tn[metal]
 ```
 
 For development:
@@ -50,7 +52,7 @@ uv sync --all-extras --dev
 import jax
 import jax.numpy as jnp
 import numpy as np
-from tnjax import (
+from tenax import (
     U1Symmetry, TensorIndex, FlowDirection,
     SymmetricTensor, TensorNetwork, contract
 )
@@ -93,7 +95,7 @@ result = tn.contract()
 ## Network Blueprint (`.net` file) Example
 
 ```python
-from tnjax import NetworkBlueprint
+from tenax import NetworkBlueprint
 
 # Define network topology as a string (or read from a .net file)
 bp = NetworkBlueprint("""
@@ -117,8 +119,8 @@ result2 = bp.launch()
 ## DMRG Example
 
 ```python
-from tnjax.algorithms.dmrg import dmrg, build_mpo_heisenberg, DMRGConfig
-from tnjax.network.network import build_mps
+from tenax.algorithms.dmrg import dmrg, build_mpo_heisenberg, DMRGConfig
+from tenax.network.network import build_mps
 
 L = 10  # chain length
 mpo = build_mpo_heisenberg(L, Jz=1.0, Jxy=1.0)
@@ -134,7 +136,7 @@ print(f"Ground state energy: {result.energy:.8f}")
 ## 2D Cylinder DMRG Example
 
 ```python
-from tnjax import AutoMPO, DMRGConfig, build_random_mps, dmrg
+from tenax import AutoMPO, DMRGConfig, build_random_mps, dmrg
 
 # Build Heisenberg Hamiltonian on a 6x3 cylinder via AutoMPO
 Lx, Ly, N = 6, 3, 18
@@ -166,7 +168,7 @@ See `examples/heisenberg_cylinder.py` for a full working example with
 ## iDMRG Example
 
 ```python
-from tnjax import idmrg, build_bulk_mpo_heisenberg, iDMRGConfig
+from tenax import idmrg, build_bulk_mpo_heisenberg, iDMRGConfig
 
 W = build_bulk_mpo_heisenberg(Jz=1.0, Jxy=1.0)
 config = iDMRGConfig(max_bond_dim=32, max_iterations=100, convergence_tol=1e-8)
@@ -178,7 +180,7 @@ print(f"Converged: {result.converged}")
 ## Infinite Cylinder iDMRG Example
 
 ```python
-from tnjax import build_bulk_mpo_heisenberg_cylinder, iDMRGConfig, idmrg
+from tenax import build_bulk_mpo_heisenberg_cylinder, iDMRGConfig, idmrg
 
 # Ly=4 cylinder: each super-site is a ring of 4 spins (d=16, D_w=14)
 # Only even Ly is supported (odd Ly frustrates AFM order).
@@ -195,7 +197,7 @@ with ED cross-checks.
 ## TRG Example
 
 ```python
-from tnjax import TRGConfig, trg, compute_ising_tensor, ising_free_energy_exact
+from tenax import TRGConfig, trg, compute_ising_tensor, ising_free_energy_exact
 
 beta = 0.44  # near critical temperature
 T = compute_ising_tensor(beta)
@@ -214,7 +216,7 @@ examples at multiple temperatures compared against the Onsager exact solution.
 ## AutoMPO Example
 
 ```python
-from tnjax import AutoMPO, build_auto_mpo
+from tenax import AutoMPO, build_auto_mpo
 
 # Class-based interface: build a Heisenberg chain
 L = 10
@@ -244,7 +246,7 @@ mpo_sym = auto.to_mpo(symmetric=True)
 
 ```python
 import jax.numpy as jnp
-from tnjax import iPEPSConfig, CTMConfig, ipeps
+from tenax import iPEPSConfig, CTMConfig, ipeps
 
 # Build a 2-site Heisenberg gate
 Sz = 0.5 * jnp.array([[1.0, 0.0], [0.0, -1.0]])
@@ -272,7 +274,7 @@ See `examples/heisenberg_ipeps_su.py` for 1-site and 2-site unit cell examples.
 
 ```python
 import jax.numpy as jnp
-from tnjax import (
+from tenax import (
     iPEPSConfig, CTMConfig, optimize_gs_ad,
     ExcitationConfig, compute_excitations, make_momentum_path,
 )
@@ -331,7 +333,7 @@ uv run python examples/<script>.py
 ## Symmetry System
 
 ```python
-from tnjax import U1Symmetry, ZnSymmetry
+from tenax import U1Symmetry, ZnSymmetry
 import numpy as np
 
 # U(1): integer charges, fusion by addition
@@ -350,19 +352,19 @@ print(z3.fuse(np.array([1, 2], dtype=np.int32),
 
 ### Float64 precision and `JAX_ENABLE_X64`
 
-TN-Jax defaults to `float64` for all tensors and algorithms. Importing
-`tnjax` automatically calls `jax.config.update("jax_enable_x64", True)`,
+Tenax defaults to `float64` for all tensors and algorithms. Importing
+`tenax` automatically calls `jax.config.update("jax_enable_x64", True)`,
 so 64-bit arithmetic is enabled out of the box.
 
-If you import JAX *before* `tnjax` and create arrays in that window, they
-will still be `float32`. To avoid surprises, either import `tnjax` first or
+If you import JAX *before* `tenax` and create arrays in that window, they
+will still be `float32`. To avoid surprises, either import `tenax` first or
 enable x64 manually:
 
 ```python
 import jax
 jax.config.update("jax_enable_x64", True)
 
-import tnjax
+import tenax
 ```
 
 ### MPO index convention
