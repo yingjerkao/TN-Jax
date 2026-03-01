@@ -2,6 +2,8 @@
 
 A JAX-based tensor network library with symmetry-aware block-sparse tensors and label-based contraction.
 
+The name **Tenax** combines **Ten**sor network + J**ax**, and is also Latin for "holding fast" — reflecting how tensor networks bind indices together through contraction.
+
 ## Features
 
 - **Block-sparse symmetric tensors** — only symmetry-allowed charge sectors stored (U(1), Z_n)
